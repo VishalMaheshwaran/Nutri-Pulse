@@ -1,0 +1,6 @@
+{
+  "name": "NutriPulse - AI Calorie & Macro Tracker",
+  "description": "Smart nutrition and macronutrient tracker powered by Gemini AI, featuring barcode scanning via OpenFoodFacts, multimodal meal photo analysis, and daily macro targets.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,6 @@
+{
+  "summary": "Comprehensive architecture and product blueprint for the Google AI Studio Quota & Usage Intelligence Platform.\nIncludes model rate limit matrices (RPM/RPD/TPM), interactive token estimator, real-time Gemini 3.8 Flash playground with live token accounting, pricing forecaster, and quota consumption simulation.",
+  "updatedAt": "2026-10-13T09:35:52.184330203Z",
+  "requestFeedback": true,
+  "userFacing": true
+}
