@@ -1,4 +1,4 @@
-import { DailyLog, FoodItem, MacroTotals, UserProfile } from '../types/nutrition';
+import { UserProfile, DailyLog, FoodItem, SavedFood, SavedWorkout, MacroTotals } from '../types/nutrition';
 
 const PROFILE_KEY = 'nutripulse_user_profile';
 const LOGS_KEY = 'nutripulse_daily_logs';
@@ -392,3 +392,22 @@ export function saveStoredSavedFoods(foods: any[]): void {
   }
 }
 
+export const SAVED_WORKOUTS_KEY = 'nutripulse_saved_workouts_v1';
+
+export function getStoredSavedSavedWorkouts(): SavedWorkout[] {
+  try {
+    const data = localStorage.getItem(SAVED_WORKOUTS_KEY);
+    return data ? JSON.parse(data) : [];
+  } catch (e) {
+    console.error('Failed to load saved workouts', e);
+    return [];
+  }
+}
+
+export function saveStoredSavedWorkouts(workouts: SavedWorkout[]) {
+  try {
+    localStorage.setItem(SAVED_WORKOUTS_KEY, JSON.stringify(workouts));
+  } catch (e) {
+    console.error('Failed to save workouts', e);
+  }
+}

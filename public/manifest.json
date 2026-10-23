@@ -1,7 +1,7 @@
 {
-  "name": "NutriPulse - AI Calorie & Macro Tracker",
+  "name": "NutriPulse - AI Calorie, Macro & Workout Tracker",
   "short_name": "NutriPulse",
-  "description": "Smart nutrition and macronutrient tracker powered by Gemini AI, featuring barcode scanning and daily macro targets.",
+  "description": "Smart nutrition, macronutrient, and workout routine tracker powered by Gemini AI, featuring barcode scanning and set-level fitness logging.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#020617",
@@ -36,6 +36,18 @@
       "name": "Log Meal",
       "short_name": "Log Meal",
       "description": "Quickly log a meal or food entry",
+      "url": "/",
+      "icons": [
+        {
+          "src": "/pwa-192x192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Log Workout",
+      "short_name": "Workout",
+      "description": "Log your resistance training session or routine",
       "url": "/",
       "icons": [
         {

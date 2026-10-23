@@ -48,6 +48,7 @@ export interface DailyLog {
   date: string; // YYYY-MM-DD
   items: FoodItem[];
   waterIntakeMl: number;
+  workouts?: WorkoutItem[]; // <-- ADD THIS LINE
   notes?: string;
 }
 
@@ -78,3 +79,33 @@ export interface SavedFood {
   createdAt: string;
 }
 
+export interface WorkoutSet {
+  id: string;
+  exerciseName: string;
+  weightKg?: number;
+  reps?: number;
+}
+
+export interface SavedWorkout {
+  id: string;
+  name: string;
+  description: string;
+  durationMinutes?: number;
+  caloriesBurned: number;
+  sets?: {
+    exerciseName: string;
+    weightKg?: number;
+    reps?: number;
+  }[];
+  createdAt: string;
+}
+
+export interface WorkoutItem {
+  id: string;
+  description: string;
+  caloriesBurned: number;
+  durationMinutes?: number;
+  avgBpm?: number;
+  sets?: WorkoutSet[]; // <-- ADD THIS LINE
+  loggedAt: string;
+}

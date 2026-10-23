@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { DailyLog, FoodItem, MealType, UserProfile, SavedFood } from './types/nutrition';
+import { DailyLog, FoodItem, MealType, UserProfile, SavedFood, WorkoutItem } from './types/nutrition';
 import {
   getStoredProfile,
   saveStoredProfile,
@@ -19,6 +19,7 @@ import { TopBar } from './components/TopBar';
 import { MacroRings } from './components/MacroRings';
 import { MealSection } from './components/MealSection';
 import { WaterTracker } from './components/WaterTracker';
+import { WorkoutTracker } from './components/WorkoutTracker';
 import { StatisticsTab } from './components/StatisticsTab';
 import { BarcodeScannerModal } from './components/BarcodeScannerModal';
 import { GeminiFoodModal } from './components/GeminiFoodModal';
@@ -28,12 +29,17 @@ import { PWAInstallButton } from './components/PWAInstallButton';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { Sparkles, Barcode, Bookmark, Flame } from 'lucide-react';
+import { SavedWorkoutsModal } from './components/SavedWorkoutsModal';
+import { SavedWorkout } from './types/nutrition';
+import { getStoredSavedSavedWorkouts, saveStoredSavedWorkouts } from './services/storage';
 
 export default function App() {
   const [profile, setProfile] = useState<UserProfile>(getStoredProfile);
   const [logs, setLogs] = useState<Record<string, DailyLog>>(getStoredLogs);
   const [savedFoods, setSavedFoods] = useState<SavedFood[]>(getStoredSavedFoods);
   const [currentDate, setCurrentDate] = useState<string>(getTodayDateString);
+  const [savedWorkouts, setSavedWorkouts] = useState<SavedWorkout[]>(getStoredSavedSavedWorkouts);
+  const [isSavedWorkoutsOpen, setIsSavedWorkoutsOpen] = useState<boolean>(false);
 
   // Modals state
   const [isBarcodeOpen, setIsBarcodeOpen] = useState<boolean>(false);
@@ -56,11 +62,52 @@ export default function App() {
     saveStoredSavedFoods(savedFoods);
   }, [savedFoods]);
 
+  useEffect(() => {
+    saveStoredSavedWorkouts(savedWorkouts);
+  }, [savedWorkouts]);
+
+  const handleSaveRoutine = (workout: WorkoutItem) => {
+    const newRoutine: SavedWorkout = {
+      id: `routine-${Date.now()}`,
+      name: workout.description,
+      description: `${workout.sets?.length || 0} exercises/sets recorded`,
+      durationMinutes: workout.durationMinutes,
+      caloriesBurned: workout.caloriesBurned,
+      sets: (workout.sets || []).map((s, i) => ({
+        ...s,
+        id: `set-${Date.now()}-${i}`,
+      })),
+      createdAt: new Date().toISOString(),
+    };
+    setSavedWorkouts((prev) => [newRoutine, ...prev.filter((r) => r.name !== workout.description)]);
+  };
+
+  const handleLogSavedWorkout = (routine: SavedWorkout) => {
+    const workoutItem: WorkoutItem = {
+      id: `workout-routine-${Date.now()}`,
+      description: routine.name,
+      caloriesBurned: routine.caloriesBurned,
+      durationMinutes: routine.durationMinutes,
+      sets: (routine.sets || []).map((s, i) => ({
+        ...s,
+        id: `set-${Date.now()}-${i}`,
+      })),
+      loggedAt: new Date().toISOString(),
+    };
+    const updatedWorkouts = [workoutItem, ...(currentLog.workouts || [])];
+    handleUpdateWorkouts(updatedWorkouts);
+  };
+
+  const handleDeleteSavedWorkout = (id: string) => {
+    setSavedWorkouts((prev) => prev.filter((r) => r.id !== id));
+  };
+
   // Current day's log
   const currentLog: DailyLog = logs[currentDate] || {
     date: currentDate,
     items: [],
     waterIntakeMl: 0,
+    workouts: [],
   };
 
   const totals = calculateTotals(currentLog.items);
@@ -101,18 +148,37 @@ export default function App() {
     }));
   };
 
-  // Copy/duplicate a single food entry
+  // Copy/duplicate a single food entry to TODAY
   const handleCopyEntry = (item: FoodItem, targetMeal: MealType) => {
+    const todayDate = getTodayDateString();
     const duplicatedItem: FoodItem = {
       ...item,
       id: `copy-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       mealType: targetMeal,
       loggedAt: new Date().toISOString(),
     };
-    handleFoodLogged(duplicatedItem);
+
+    setLogs((prev) => {
+      const targetLog = prev[todayDate] || {
+        date: todayDate,
+        items: [],
+        waterIntakeMl: 0,
+        workouts: [],
+      };
+      return {
+        ...prev,
+        [todayDate]: {
+          ...targetLog,
+          items: [duplicatedItem, ...targetLog.items],
+        },
+      };
+    });
+    
+    // Switch view to today automatically
+    setCurrentDate(todayDate);
   };
 
-  // Copy an entire meal to another meal
+  // Copy an entire meal to TODAY
   const handleCopyMeal = (sourceMeal: MealType, targetMeal: MealType) => {
     const sourceItems = currentLog.items.filter((i) => i.mealType === sourceMeal);
     if (sourceItems.length === 0) return;
@@ -124,13 +190,26 @@ export default function App() {
       loggedAt: new Date().toISOString(),
     }));
 
-    setLogs((prev) => ({
-      ...prev,
-      [currentDate]: {
-        ...currentLog,
-        items: [...duplicatedItems, ...currentLog.items],
-      },
-    }));
+    const todayDate = getTodayDateString();
+
+    setLogs((prev) => {
+      const targetLog = prev[todayDate] || {
+        date: todayDate,
+        items: [],
+        waterIntakeMl: 0,
+        workouts: [],
+      };
+      return {
+        ...prev,
+        [todayDate]: {
+          ...targetLog,
+          items: [...duplicatedItems, ...targetLog.items],
+        },
+      };
+    });
+    
+    // Switch view to today automatically
+    setCurrentDate(todayDate);
   };
 
   // Save an item to personal saved foods / repeat favorites
@@ -228,6 +307,16 @@ export default function App() {
     }));
   };
 
+  const handleUpdateWorkouts = (newWorkouts: WorkoutItem[]) => {
+    setLogs((prev) => ({
+      ...prev,
+      [currentDate]: {
+        ...currentLog,
+        workouts: newWorkouts,
+      },
+    }));
+  };
+
   const openBarcodeForMeal = (meal: MealType) => {
     setActiveMealTarget(meal);
     setIsBarcodeOpen(true);
@@ -250,8 +339,11 @@ export default function App() {
   const snackItems = currentLog.items.filter((i) => i.mealType === 'snack');
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans overflow-x-hidden w-full">
-      {/* Top Bar */}
+    <div 
+      className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans w-full"
+      style={{ paddingTop: 'calc(env(safe-area-inset-top) + 70px)' }}
+    >
+      {/* Top Bar (Now fixed to always show on mobile) */}
       <TopBar
         currentDate={currentDate}
         onDateChange={setCurrentDate}
@@ -265,10 +357,6 @@ export default function App() {
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6 pb-28 md:pb-8 space-y-4 sm:space-y-6 overflow-x-hidden">
-        {/* Mobile PWA Install Banner */}
-        <div className="md:hidden">
-          <PWAInstallButton variant="banner" />
-        </div>
 
         {/* Quick Action Kicker Bar */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 p-3.5 sm:p-4 bg-slate-900/60 border border-slate-800 rounded-2xl w-full">
@@ -396,6 +484,30 @@ export default function App() {
               onUpdateWater={handleUpdateWater}
             />
 
+            {/* Workout Tracker */}
+            <WorkoutTracker
+              workouts={currentLog.workouts || []}
+              profile={profile}
+              onUpdateWorkouts={handleUpdateWorkouts}
+              onCopyWorkout={(workout) => {
+                const duplicated: WorkoutItem = {
+                  ...workout,
+                  id: `workout-copy-${Date.now()}`,
+                  loggedAt: new Date().toISOString(),
+                };
+                const todayDate = getTodayDateString();
+                setLogs((prev) => {
+                  const targetLog = prev[todayDate] || { date: todayDate, items: [], waterIntakeMl: 0, workouts: [] };
+                  return {
+                  ...prev,
+                  [todayDate]: { ...targetLog, workouts: [duplicated, ...(targetLog.workouts || [])] },
+                  };
+                });
+                setCurrentDate(todayDate);
+              }}
+              onSaveRoutine={handleSaveRoutine}
+              onOpenSavedWorkouts={() => setIsSavedWorkoutsOpen(true)}
+            />
           </div>
         )}
 
@@ -449,6 +561,14 @@ export default function App() {
         onClose={() => setIsProfileOpen(false)}
         profile={profile}
         onSaveProfile={setProfile}
+      />
+
+      <SavedWorkoutsModal
+        isOpen={isSavedWorkoutsOpen}
+        onClose={() => setIsSavedWorkoutsOpen(false)}
+        savedWorkouts={savedWorkouts}
+        onLogSavedWorkout={handleLogSavedWorkout}
+        onDeleteSavedWorkout={handleDeleteSavedWorkout}
       />
 
       {/* Offline Connectivity Toast */}
