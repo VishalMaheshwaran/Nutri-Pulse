@@ -1,17 +1,37 @@
 import React from 'react';
 import { MacroTotals, UserProfile } from '../types/nutrition';
 import confetti from 'canvas-confetti';
-import { Flame, Sparkles } from 'lucide-react';
+import { 
+  Flame, 
+  Sparkles, 
+  Utensils, 
+  Dumbbell, 
+  TrendingUp, 
+  AlertCircle, 
+  CheckCircle2 
+} from 'lucide-react';
 
 interface MacroRingsProps {
   totals: MacroTotals;
   profile: UserProfile;
+  caloriesBurned?: number; // Added to track workout burn
 }
 
-export const MacroRings: React.FC<MacroRingsProps> = ({ totals, profile }) => {
-  const caloriesRemaining = Math.max(0, profile.targetCalories - totals.calories);
-  const caloriesPct = Math.min(100, Math.round((totals.calories / profile.targetCalories) * 100));
+export const MacroRings: React.FC<MacroRingsProps> = ({ 
+  totals, 
+  profile, 
+  caloriesBurned = 0 
+}) => {
+  // Net Calories Math
+  const netCalories = Math.max(0, totals.calories - caloriesBurned);
+  const caloriesRemaining = profile.targetCalories - totals.calories + caloriesBurned;
+  const isOverTarget = caloriesRemaining < 0;
 
+  // Percentages
+  const caloriesPct = profile.targetCalories > 0 
+    ? Math.min(100, Math.max(0, Math.round((netCalories / profile.targetCalories) * 100))) 
+    : 0;
+  
   const proteinPct = Math.min(100, Math.round((totals.protein / profile.targetProtein) * 100));
   const carbsPct = Math.min(100, Math.round((totals.carbs / profile.targetCarbs) * 100));
   const fatPct = Math.min(100, Math.round((totals.fat / profile.targetFat) * 100));
@@ -25,14 +45,75 @@ export const MacroRings: React.FC<MacroRingsProps> = ({ totals, profile }) => {
     });
   };
 
+  // Dynamic Progress Status
+  const getProgressStatus = () => {
+    if (totals.calories === 0 && caloriesBurned === 0) {
+      return {
+        text: 'Ready for today — log your first meal!',
+        color: 'text-slate-300 bg-slate-800/80 border-slate-700',
+        icon: Sparkles,
+      };
+    }
+    if (totals.calories === 0 && caloriesBurned > 0) {
+      return {
+        text: `Burned ${caloriesBurned} kcal — time to refuel.`,
+        color: 'text-cyan-300 bg-cyan-500/10 border-cyan-500/30',
+        icon: Dumbbell,
+      };
+    }
+    if (caloriesRemaining < -150) {
+      return {
+        text: `${Math.abs(caloriesRemaining)} kcal over — a quick workout helps!`,
+        color: 'text-rose-300 bg-rose-500/10 border-rose-500/30',
+        icon: AlertCircle,
+      };
+    }
+    if (caloriesRemaining >= -150 && caloriesRemaining <= 150) {
+      return {
+        text: 'Spot on! You are in your calorie sweet spot.',
+        color: 'text-emerald-300 bg-emerald-500/15 border-emerald-500/40',
+        icon: CheckCircle2,
+      };
+    }
+    if (caloriesPct >= 75) {
+      return {
+        text: `Strong finish! ${caloriesRemaining} kcal left today.`,
+        color: 'text-emerald-300 bg-emerald-500/10 border-emerald-500/30',
+        icon: TrendingUp,
+      };
+    }
+    if (caloriesPct >= 40) {
+      return {
+        text: `Great momentum! ${caloriesPct}% of net goal met.`,
+        color: 'text-cyan-300 bg-cyan-500/10 border-cyan-500/30',
+        icon: Flame,
+      };
+    }
+    return {
+      text: `Plenty of fuel — ${caloriesRemaining} kcal remaining.`,
+      color: 'text-amber-300 bg-amber-500/10 border-amber-500/30',
+      icon: Sparkles,
+    };
+  };
+
+  const status = getProgressStatus();
+  const StatusIcon = status.icon;
+
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-xl space-y-5 sm:space-y-6 w-full">
-      {/* Top Banner: Calories Overview */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6 items-center">
-        {/* Left Circle / Radial Gauge */}
-        <div className="lg:col-span-4 flex flex-col items-center justify-center p-4 bg-slate-950/60 rounded-2xl border border-slate-800/80 w-full">
+        
+        {/* Left Column: Net Calories & Progress */}
+        <div className="lg:col-span-5 flex flex-col items-center justify-center p-4 bg-slate-950/60 rounded-2xl border border-slate-800/80 w-full space-y-4">
+          
+          {/* Dynamic Status Pill */}
+          <div className={`w-full px-3 py-2 rounded-xl border text-[11px] sm:text-xs font-semibold flex items-center justify-center gap-1.5 text-center transition-all ${status.color}`}>
+            <StatusIcon className="w-3.5 h-3.5 shrink-0" />
+            <span>{status.text}</span>
+          </div>
+
           <div className="relative w-38 h-38 sm:w-44 sm:h-44 flex items-center justify-center">
-            {/* SVG Progress Ring */}
+            {/* SVG Progress Ring (Driven by Net Calories) */}
             <svg className="w-full h-full -rotate-90" viewBox="0 0 120 120">
               <circle
                 cx="60"
@@ -47,68 +128,58 @@ export const MacroRings: React.FC<MacroRingsProps> = ({ totals, profile }) => {
                 cy="60"
                 r="50"
                 className={`transition-all duration-1000 ease-out ${
-                  totals.calories > profile.targetCalories
-                    ? 'stroke-rose-500'
-                    : 'stroke-emerald-400'
+                  isOverTarget ? 'stroke-rose-500' : 'stroke-emerald-400'
                 }`}
                 strokeWidth="10"
                 strokeDasharray={2 * Math.PI * 50}
-                strokeDashoffset={
-                  2 * Math.PI * 50 * (1 - Math.min(1, totals.calories / profile.targetCalories))
-                }
+                strokeDashoffset={2 * Math.PI * 50 * (1 - caloriesPct / 100)}
                 strokeLinecap="round"
                 fill="transparent"
               />
             </svg>
 
-            {/* Centered Calories Data */}
+            {/* Centered Net Calories Data */}
             <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-2">
-              <span className="text-2xl sm:text-3xl font-extrabold font-mono tracking-tight text-slate-100 tabular-nums">
-                {totals.calories}
+              <span className="text-[10px] sm:text-[11px] uppercase tracking-wider text-slate-400 font-bold mb-0.5">
+                {isOverTarget ? 'Over Target' : 'Remaining'}
               </span>
-              <span className="text-[11px] sm:text-xs uppercase tracking-wider text-slate-400 font-medium">
-                of {profile.targetCalories} kcal
+              <span className={`text-2xl sm:text-3xl font-extrabold font-mono tracking-tight tabular-nums ${isOverTarget ? 'text-rose-400' : 'text-slate-100'}`}>
+                {Math.abs(caloriesRemaining)}
               </span>
-              <span
-                className={`text-[11px] font-mono mt-0.5 ${
-                  totals.calories > profile.targetCalories ? 'text-rose-400' : 'text-emerald-400'
-                }`}
-              >
-                {caloriesPct}% of target
+              <span className="text-[10px] sm:text-[11px] text-slate-500 font-medium mt-1">
+                Target: {profile.targetCalories}
               </span>
             </div>
           </div>
 
-          <div className="mt-3 sm:mt-4 flex flex-wrap items-center justify-center gap-3 sm:gap-4 text-xs font-mono w-full">
-            <div className="text-center min-w-[70px]">
-              <span className="text-slate-400 block text-[10px] sm:text-[11px]">Remaining</span>
-              <span className="text-slate-200 font-bold tabular-nums">
-                {caloriesRemaining} kcal
-              </span>
+          {/* Eaten / Burned / Net Breakdown */}
+          <div className="w-full grid grid-cols-3 gap-2 pt-1">
+            <div className="bg-slate-900 border border-slate-800/80 rounded-xl p-2 text-center">
+              <div className="flex items-center justify-center gap-1 text-emerald-400 mb-0.5">
+                <Utensils className="w-3 h-3" />
+              </div>
+              <div className="text-sm font-bold font-mono text-slate-200">{totals.calories}</div>
+              <span className="text-[9px] text-slate-500 uppercase">Eaten</span>
             </div>
-            <div className="h-4 w-px bg-slate-800" />
-            <div className="text-center min-w-[70px]">
-              <span className="text-slate-400 block text-[10px] sm:text-[11px]">Goal Mode</span>
-              <span className="text-emerald-400 capitalize font-medium text-xs">
-                {profile.goal.replace('_', ' ')}
-              </span>
+            <div className="bg-slate-900 border border-orange-500/20 rounded-xl p-2 text-center">
+              <div className="flex items-center justify-center gap-1 text-orange-400 mb-0.5">
+                <Dumbbell className="w-3 h-3" />
+              </div>
+              <div className="text-sm font-bold font-mono text-orange-400">-{caloriesBurned}</div>
+              <span className="text-[9px] text-slate-500 uppercase">Burned</span>
             </div>
-            {profile.bodyFatPct && (
-              <>
-                <div className="h-4 w-px bg-slate-800 hidden sm:block" />
-                <div className="text-center min-w-[70px]">
-                  <span className="text-slate-400 block text-[10px] sm:text-[11px]">Body Fat</span>
-                  <span className="text-cyan-400 font-bold tabular-nums">
-                    {profile.bodyFatPct}%
-                  </span>
-                </div>
-              </>
-            )}
+            <div className="bg-slate-900 border border-cyan-500/20 rounded-xl p-2 text-center">
+              <div className="flex items-center justify-center gap-1 text-cyan-400 mb-0.5">
+                <Flame className="w-3 h-3" />
+              </div>
+              <div className="text-sm font-bold font-mono text-cyan-400">{netCalories}</div>
+              <span className="text-[9px] text-slate-500 uppercase">Net</span>
+            </div>
           </div>
         </div>
 
         {/* Right 4-Macro Bars Grid */}
-        <div className="lg:col-span-8 space-y-4 w-full">
+        <div className="lg:col-span-7 space-y-4 w-full">
           <div className="flex items-center justify-between gap-2">
             <div>
               <h2 className="text-base sm:text-lg font-bold text-slate-100 flex items-center gap-2">
@@ -116,7 +187,7 @@ export const MacroRings: React.FC<MacroRingsProps> = ({ totals, profile }) => {
                 <span>Daily Macronutrient Targets</span>
               </h2>
               <p className="text-xs text-slate-400">
-                Tracked in real time from logged meals and food scans
+                Tracked in real time from logged meals
               </p>
             </div>
             {proteinPct >= 100 && (
@@ -229,7 +300,7 @@ export const MacroRings: React.FC<MacroRingsProps> = ({ totals, profile }) => {
             </div>
           </div>
 
-          {/* Secondary stats strip: Sugar, Sodium, Protein Energy - perfectly responsive grid */}
+          {/* Secondary stats strip: Sugar, Sodium, Protein Energy */}
           <div className="grid grid-cols-3 gap-2 px-3 py-2.5 bg-slate-950/40 rounded-xl border border-slate-800/60 text-[11px] sm:text-xs font-mono text-slate-400 text-center">
             <div>
               <span className="block text-[10px] sm:text-xs text-slate-500">Sugars</span>

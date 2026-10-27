@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { DailyLog, FoodItem, MealType, UserProfile, SavedFood, WorkoutItem } from './types/nutrition';
+import { DailyLog, FoodItem, MealType, UserProfile, SavedFood, WorkoutItem, SavedWorkout } from './types/nutrition';
 import {
   getStoredProfile,
   saveStoredProfile,
@@ -14,6 +14,8 @@ import {
   saveStoredSavedFoods,
   getTodayDateString,
   calculateTotals,
+  getStoredSavedSavedWorkouts, 
+  saveStoredSavedWorkouts
 } from './services/storage';
 import { TopBar } from './components/TopBar';
 import { MacroRings } from './components/MacroRings';
@@ -25,13 +27,11 @@ import { BarcodeScannerModal } from './components/BarcodeScannerModal';
 import { GeminiFoodModal } from './components/GeminiFoodModal';
 import { ProfileModal } from './components/ProfileModal';
 import { SavedFoodsModal } from './components/SavedFoodsModal';
-import { PWAInstallButton } from './components/PWAInstallButton';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { OfflineIndicator } from './components/OfflineIndicator';
-import { Sparkles, Barcode, Bookmark, Flame } from 'lucide-react';
 import { SavedWorkoutsModal } from './components/SavedWorkoutsModal';
-import { SavedWorkout } from './types/nutrition';
-import { getStoredSavedSavedWorkouts, saveStoredSavedWorkouts } from './services/storage';
+import { GoalCelebrationModal } from './components/GoalCelebrationModal';
+import { LiveMacroWidget } from './components/LiveMacroWidget.tsx';
 
 export default function App() {
   const [profile, setProfile] = useState<UserProfile>(getStoredProfile);
@@ -46,8 +46,12 @@ export default function App() {
   const [isGeminiOpen, setIsGeminiOpen] = useState<boolean>(false);
   const [isProfileOpen, setIsProfileOpen] = useState<boolean>(false);
   const [isSavedFoodsOpen, setIsSavedFoodsOpen] = useState<boolean>(false);
+  const [isStreakPreviewOpen, setIsStreakPreviewOpen] = useState<boolean>(false);
   const [activeMealTarget, setActiveMealTarget] = useState<MealType>('lunch');
   const [activeView, setActiveView] = useState<'dashboard' | 'statistics'>('dashboard');
+
+  // State to track which item we are currently editing via the AI Modal
+  const [geminiItemToEdit, setGeminiItemToEdit] = useState<FoodItem | undefined>(undefined);
 
   // Sync to localStorage
   useEffect(() => {
@@ -111,10 +115,24 @@ export default function App() {
   };
 
   const totals = calculateTotals(currentLog.items);
-
+  const burnedCalories = (currentLog.workouts || []).reduce((sum, workout) => sum + workout.caloriesBurned, 0);
+  
   // Handlers
   const handleFoodLogged = (newItem: FoodItem) => {
     const updatedItems = [newItem, ...currentLog.items];
+    setLogs((prev) => ({
+      ...prev,
+      [currentDate]: {
+        ...currentLog,
+        items: updatedItems,
+      },
+    }));
+  };
+
+  const handleUpdateItem = (updatedItem: FoodItem) => {
+    const updatedItems = currentLog.items.map((item) =>
+      item.id === updatedItem.id ? updatedItem : item
+    );
     setLogs((prev) => ({
       ...prev,
       [currentDate]: {
@@ -148,7 +166,6 @@ export default function App() {
     }));
   };
 
-  // Copy/duplicate a single food entry to TODAY
   const handleCopyEntry = (item: FoodItem, targetMeal: MealType) => {
     const todayDate = getTodayDateString();
     const duplicatedItem: FoodItem = {
@@ -174,11 +191,9 @@ export default function App() {
       };
     });
     
-    // Switch view to today automatically
     setCurrentDate(todayDate);
   };
 
-  // Copy an entire meal to TODAY
   const handleCopyMeal = (sourceMeal: MealType, targetMeal: MealType) => {
     const sourceItems = currentLog.items.filter((i) => i.mealType === sourceMeal);
     if (sourceItems.length === 0) return;
@@ -208,11 +223,9 @@ export default function App() {
       };
     });
     
-    // Switch view to today automatically
     setCurrentDate(todayDate);
   };
 
-  // Save an item to personal saved foods / repeat favorites
   const handleSaveToFavorites = (item: FoodItem) => {
     const newSaved: SavedFood = {
       id: `fav-${Date.now()}`,
@@ -228,13 +241,13 @@ export default function App() {
       sugar: item.sugar ? Math.round(item.sugar * item.servings * 10) / 10 : undefined,
       sodiumMg: item.sodiumMg ? Math.round(item.sodiumMg * item.servings) : undefined,
       notes: item.healthTip || undefined,
+      originalPrompt: item.originalPrompt || undefined,
       createdAt: new Date().toISOString(),
     };
 
     setSavedFoods((prev) => [newSaved, ...prev.filter((f) => f.name.toLowerCase() !== item.name.toLowerCase())]);
   };
 
-  // Log a saved food to a meal
   const handleLogSavedFood = (savedFood: SavedFood, targetMeal: MealType) => {
     const foodItem: FoodItem = {
       id: `saved-log-${Date.now()}`,
@@ -250,8 +263,9 @@ export default function App() {
       fiber: savedFood.fiber,
       sugar: savedFood.sugar,
       sodiumMg: savedFood.sodiumMg,
-      source: 'preset',
+      source: savedFood.originalPrompt ? 'ai' : 'preset',
       healthTip: savedFood.notes,
+      originalPrompt: savedFood.originalPrompt,
       loggedAt: new Date().toISOString(),
       mealType: targetMeal,
     };
@@ -322,8 +336,9 @@ export default function App() {
     setIsBarcodeOpen(true);
   };
 
-  const openGeminiForMeal = (meal: MealType) => {
+  const openGeminiForMeal = (meal: MealType, itemToEdit?: FoodItem) => {
     setActiveMealTarget(meal);
+    setGeminiItemToEdit(itemToEdit);
     setIsGeminiOpen(true);
   };
 
@@ -343,7 +358,7 @@ export default function App() {
       className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans w-full"
       style={{ paddingTop: 'calc(env(safe-area-inset-top) + 70px)' }}
     >
-      {/* Top Bar (Now fixed to always show on mobile) */}
+      {/* Top Bar with DD/MM format and Month Calendar */}
       <TopBar
         currentDate={currentDate}
         onDateChange={setCurrentDate}
@@ -353,62 +368,30 @@ export default function App() {
         onOpenProfile={() => setIsProfileOpen(true)}
         activeView={activeView}
         setActiveView={setActiveView}
+        logs={logs}
+        profile={profile}
       />
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6 pb-28 md:pb-8 space-y-4 sm:space-y-6 overflow-x-hidden">
 
-        {/* Quick Action Kicker Bar */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 p-3.5 sm:p-4 bg-slate-900/60 border border-slate-800 rounded-2xl w-full">
-          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
-              <Flame className="w-5 h-5" />
-            </div>
-            <div className="min-w-0">
-              <h1 className="text-sm sm:text-base font-bold text-slate-100 truncate">
-                Nutrient &amp; Macro Intelligence
-              </h1>
-              <p className="text-[11px] sm:text-xs text-slate-400 line-clamp-1 sm:line-clamp-none">
-                Scan barcodes, repeat saved favorites, or use Gemini AI for smart tracking
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-3 sm:flex items-center gap-2 w-full sm:w-auto">
-            <button
-              onClick={() => openSavedFoodsForMeal('breakfast')}
-              className="py-2 px-2 sm:px-3.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer truncate"
-              title="Saved Foods"
-            >
-              <Bookmark className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-              <span className="truncate hidden xs:inline">Saved ({savedFoods.length})</span>
-              <span className="truncate xs:hidden">Saved</span>
-            </button>
-            <button
-              onClick={() => openGeminiForMeal('lunch')}
-              className="py-2 px-2 sm:px-3.5 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer truncate"
-              title="AI Food Estimator"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-              <span className="truncate hidden xs:inline">AI Photo/Text</span>
-              <span className="truncate xs:hidden">AI Scan</span>
-            </button>
-            <button
-              onClick={() => openBarcodeForMeal('lunch')}
-              className="py-2 px-2 sm:px-3.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer truncate"
-              title="Barcode Scanner"
-            >
-              <Barcode className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span className="truncate hidden xs:inline">Barcode</span>
-              <span className="truncate xs:hidden">Barcode</span>
-            </button>
-          </div>
-        </div>
-
         {activeView === 'dashboard' && (
-          <div className="space-y-6 sm:space-y-8 w-full">
+          <div className="space-y-5 sm:space-y-7 w-full">
+            {/* NEW: Live Macro Widget & Locked Notification Controller */}
+            <LiveMacroWidget
+              totals={totals}
+              profile={profile}
+              caloriesBurned={burnedCalories}
+              logs={logs}
+              onTriggerStreakPreview={() => setIsStreakPreviewOpen(true)}
+            />
+
             {/* Primary Macronutrient Rings & Goals */}
-            <MacroRings totals={totals} profile={profile} />
+            <MacroRings 
+              totals={totals} 
+              profile={profile} 
+              caloriesBurned={burnedCalories} 
+            />
 
             {/* Meal Sections Grid */}
             <div className="space-y-4 sm:space-y-5 w-full">
@@ -425,10 +408,11 @@ export default function App() {
                 <MealSection
                   mealType="breakfast"
                   items={breakfastItems}
-                  onOpenBarcode={openBarcodeForMeal}
+                  onOpenCamera={openBarcodeForMeal}
                   onOpenGemini={openGeminiForMeal}
                   onOpenSavedFoods={openSavedFoodsForMeal}
                   onUpdateServing={handleUpdateServing}
+                  onUpdateItem={handleUpdateItem}
                   onDeleteItem={handleDeleteItem}
                   onCopyEntry={handleCopyEntry}
                   onCopyMeal={handleCopyMeal}
@@ -438,10 +422,11 @@ export default function App() {
                 <MealSection
                   mealType="lunch"
                   items={lunchItems}
-                  onOpenBarcode={openBarcodeForMeal}
+                  onOpenCamera={openBarcodeForMeal}
                   onOpenGemini={openGeminiForMeal}
                   onOpenSavedFoods={openSavedFoodsForMeal}
                   onUpdateServing={handleUpdateServing}
+                  onUpdateItem={handleUpdateItem}
                   onDeleteItem={handleDeleteItem}
                   onCopyEntry={handleCopyEntry}
                   onCopyMeal={handleCopyMeal}
@@ -451,10 +436,11 @@ export default function App() {
                 <MealSection
                   mealType="dinner"
                   items={dinnerItems}
-                  onOpenBarcode={openBarcodeForMeal}
+                  onOpenCamera={openBarcodeForMeal}
                   onOpenGemini={openGeminiForMeal}
                   onOpenSavedFoods={openSavedFoodsForMeal}
                   onUpdateServing={handleUpdateServing}
+                  onUpdateItem={handleUpdateItem}
                   onDeleteItem={handleDeleteItem}
                   onCopyEntry={handleCopyEntry}
                   onCopyMeal={handleCopyMeal}
@@ -464,10 +450,11 @@ export default function App() {
                 <MealSection
                   mealType="snack"
                   items={snackItems}
-                  onOpenBarcode={openBarcodeForMeal}
+                  onOpenCamera={openBarcodeForMeal}
                   onOpenGemini={openGeminiForMeal}
                   onOpenSavedFoods={openSavedFoodsForMeal}
                   onUpdateServing={handleUpdateServing}
+                  onUpdateItem={handleUpdateItem}
                   onDeleteItem={handleDeleteItem}
                   onCopyEntry={handleCopyEntry}
                   onCopyMeal={handleCopyMeal}
@@ -499,8 +486,8 @@ export default function App() {
                 setLogs((prev) => {
                   const targetLog = prev[todayDate] || { date: todayDate, items: [], waterIntakeMl: 0, workouts: [] };
                   return {
-                  ...prev,
-                  [todayDate]: { ...targetLog, workouts: [duplicated, ...(targetLog.workouts || [])] },
+                    ...prev,
+                    [todayDate]: { ...targetLog, workouts: [duplicated, ...(targetLog.workouts || [])] },
                   };
                 });
                 setCurrentDate(todayDate);
@@ -527,7 +514,7 @@ export default function App() {
       {/* Footer */}
       <footer className="border-t border-slate-900 bg-slate-950 py-6 px-4 text-center text-xs text-slate-500 w-full">
         <p>
-          NutriPulse · Powered by Google Gemini 3.8 Flash &amp; OpenFoodFacts Barcode Intelligence
+          NutriPulse · Powered by Google Gemini 3.1 Flash Lite &amp; AI Vision Intelligence
         </p>
       </footer>
 
@@ -541,9 +528,19 @@ export default function App() {
 
       <GeminiFoodModal
         isOpen={isGeminiOpen}
-        onClose={() => setIsGeminiOpen(false)}
-        onFoodLogged={handleFoodLogged}
+        onClose={() => {
+          setIsGeminiOpen(false);
+          setGeminiItemToEdit(undefined);
+        }}
+        onFoodLogged={(newItem) => {
+          if (geminiItemToEdit) {
+            handleUpdateItem({ ...newItem, id: geminiItemToEdit.id });
+          } else {
+            handleFoodLogged(newItem);
+          }
+        }}
         defaultMealType={activeMealTarget}
+        itemToEdit={geminiItemToEdit}
       />
 
       <SavedFoodsModal
@@ -569,6 +566,14 @@ export default function App() {
         savedWorkouts={savedWorkouts}
         onLogSavedWorkout={handleLogSavedWorkout}
         onDeleteSavedWorkout={handleDeleteSavedWorkout}
+      />
+
+      {/* NEW: Next-Day Goal Streak & AI Celebratory Popup */}
+      <GoalCelebrationModal
+        logs={logs}
+        profile={profile}
+        forceOpenTest={isStreakPreviewOpen}
+        onCloseTest={() => setIsStreakPreviewOpen(false)}
       />
 
       {/* Offline Connectivity Toast */}

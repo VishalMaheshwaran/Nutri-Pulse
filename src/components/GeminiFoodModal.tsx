@@ -1,12 +1,14 @@
-import React, { useState, useRef } from 'react';
-import { Sparkles, Camera, Upload, X, CheckCircle, RefreshCw, AlertCircle, Info, ChevronRight, Layers } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Sparkles, Camera, Upload, X, CheckCircle, RefreshCw, AlertCircle, ChevronRight, Layers, Loader2 } from 'lucide-react';
 import { FoodItem, MealType } from '../types/nutrition';
+import { getStoredApiKey, callGeminiWithInfiniteRetry } from '../utils/geminiStorage';
 
 interface GeminiFoodModalProps {
   isOpen: boolean;
   onClose: () => void;
   onFoodLogged: (item: FoodItem) => void;
   defaultMealType?: MealType;
+  itemToEdit?: FoodItem; // NEW: Receives the item we want to edit
 }
 
 const QUICK_PROMPT_PRESETS = [
@@ -22,6 +24,7 @@ export const GeminiFoodModal: React.FC<GeminiFoodModalProps> = ({
   onClose,
   onFoodLogged,
   defaultMealType = 'lunch',
+  itemToEdit,
 }) => {
   const [selectedMeal, setSelectedMeal] = useState<MealType>(defaultMealType);
   const [activeTab, setActiveTab] = useState<'text' | 'image'>('text');
@@ -31,9 +34,26 @@ export const GeminiFoodModal: React.FC<GeminiFoodModalProps> = ({
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [analysisResult, setAnalysisResult] = useState<any | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [servingMult, setServingMult] = useState<number>(1);
-
+  
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Auto-populate the form if we are editing an existing AI item
+  useEffect(() => {
+    if (isOpen) {
+      setSelectedMeal(itemToEdit?.mealType || defaultMealType);
+      if (itemToEdit) {
+        setActiveTab('text');
+        // Load the prompt if it exists, otherwise fall back to the name
+        setTextInput(itemToEdit.originalPrompt || itemToEdit.name || '');
+        setAnalysisResult(null); // Clear previous results to force a re-calc
+      } else {
+        handleReset();
+      }
+    }
+  }, [isOpen, itemToEdit, defaultMealType]);
 
   if (!isOpen) return null;
 
@@ -69,40 +89,84 @@ export const GeminiFoodModal: React.FC<GeminiFoodModalProps> = ({
     }
 
     setIsAnalyzing(true);
+    setStatusMessage('Analyzing nutrition & portion macros...');
+    abortControllerRef.current = new AbortController();
 
     try {
-      let imageBase64: string | undefined = undefined;
-      if (imagePreview) {
-        // Strip data:image/...;base64, prefix
-        const commaIndex = imagePreview.indexOf(',');
-        if (commaIndex !== -1) {
-          imageBase64 = imagePreview.substring(commaIndex + 1);
-        }
-      }
+      // Use our new infinite retry wrapper to bypass 503 errors safely
+      const parsedNutritionData = await callGeminiWithInfiniteRetry(
+        async (apiKey) => {
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`;
 
-      const res = await fetch('/api/analyze-food', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text: hasText ? textInput.trim() : undefined,
-          imageBase64,
-          mimeType: imageMimeType,
-        }),
-      });
+          let imageBase64: string | undefined = undefined;
+          if (imagePreview) {
+            const commaIndex = imagePreview.indexOf(',');
+            if (commaIndex !== -1) {
+              imageBase64 = imagePreview.substring(commaIndex + 1);
+            }
+          }
 
-      const data = await res.json();
+          const promptText = `Analyze this food based on the provided ${hasImage ? 'image and text' : 'text'}. Extract or estimate the nutritional values.
+          User Input: ${hasText ? textInput.trim() : 'No text provided'}
+          
+          IMPORTANT RULE FOR QUANTITIES: If the user specifies multiple servings (e.g. "3 eggs" or "2 bowls"), you MUST calculate and return the TOTAL combined macros for the entire quantity described. 
 
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to analyze food.');
-      }
+          Return ONLY a raw, valid, minified JSON object. Do not use Markdown formatting or code blocks like \`\`\`json. The JSON must have these exact keys:
+          foodName, brand (string or 'generic'), servingSize, servingWeightGrams (number), calories (number), protein (number), carbs (number), fat (number), fiber (number), sugar (number), sodiumMg (number), confidence ('high', 'medium', 'low'), dietaryTags (array of strings), healthTip (string), breakdown (array of objects with keys: item, portion, calories, protein, carbs, fat).`;
 
-      setAnalysisResult(data);
+          const parts: any[] = [{ text: promptText }];
+          if (imageBase64) {
+            parts.push({
+              inlineData: {
+                mimeType: imageMimeType || 'image/jpeg',
+                data: imageBase64,
+              }
+            });
+          }
+
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contents: [{ parts }] }),
+            signal: abortControllerRef.current?.signal
+          });
+
+          const rawText = await res.text();
+
+          if (rawText.trim().startsWith('<')) {
+            throw new Error("Network returned HTML instead of JSON. Check your internet connection.");
+          }
+
+          const resultData = JSON.parse(rawText);
+
+          if (resultData.error) {
+            throw new Error(resultData.error.message || 'Gemini API Error');
+          }
+
+          const modelOutput = resultData.candidates?.[0]?.content?.parts?.[0]?.text;
+          
+          if (!modelOutput) {
+            throw new Error("Invalid response format from Gemini");
+          }
+
+          const cleanedJson = modelOutput.replace(/```json/g, '').replace(/```/g, '').trim();
+          return JSON.parse(cleanedJson);
+        },
+        (attempt, retryMsg) => {
+          setStatusMessage(retryMsg); // Silently updates the button text during an error spike!
+        },
+        abortControllerRef.current.signal
+      );
+
+      setAnalysisResult(parsedNutritionData);
       setServingMult(1);
     } catch (err: any) {
+      if (err.message === 'ABORTED') return;
       console.error('Gemini analysis error:', err);
-      setErrorMsg(err.message || 'Analysis error. Please try again or rephrase.');
+      setErrorMsg(err.message || 'Analysis error. Please check your API key and connection.');
     } finally {
       setIsAnalyzing(false);
+      setStatusMessage(null);
     }
   };
 
@@ -110,7 +174,8 @@ export const GeminiFoodModal: React.FC<GeminiFoodModalProps> = ({
     if (!analysisResult) return;
 
     const newFoodItem: FoodItem = {
-      id: `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      // If we are editing, keep the same ID so Dashboard overwrites it. Otherwise make a new ID.
+      id: itemToEdit ? itemToEdit.id : `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       name: analysisResult.foodName || 'AI Analyzed Food',
       brand: analysisResult.brand !== 'generic' ? analysisResult.brand : undefined,
       servingSize: analysisResult.servingSize || '1 portion',
@@ -124,10 +189,11 @@ export const GeminiFoodModal: React.FC<GeminiFoodModalProps> = ({
       sugar: Math.round((analysisResult.sugar || 0) * servingMult * 10) / 10,
       sodiumMg: Math.round((analysisResult.sodiumMg || 0) * servingMult),
       source: 'ai',
+      originalPrompt: textInput.trim() || undefined, // SAVES THE PROMPT SO IT CAN BE EDITED LATER!
       confidence: analysisResult.confidence || 'high',
       dietaryTags: analysisResult.dietaryTags,
       healthTip: analysisResult.healthTip,
-      loggedAt: new Date().toISOString(),
+      loggedAt: itemToEdit ? itemToEdit.loggedAt : new Date().toISOString(),
       mealType: selectedMeal,
     };
 
@@ -141,7 +207,9 @@ export const GeminiFoodModal: React.FC<GeminiFoodModalProps> = ({
     setTextInput('');
     setImagePreview(null);
     setErrorMsg(null);
+    setStatusMessage(null);
     setServingMult(1);
+    abortControllerRef.current?.abort();
   };
 
   return (
@@ -155,13 +223,13 @@ export const GeminiFoodModal: React.FC<GeminiFoodModalProps> = ({
             </div>
             <div className="min-w-0">
               <h3 className="text-sm sm:text-base font-bold text-slate-100 flex items-center gap-2 truncate">
-                <span className="truncate">Gemini AI Food Estimator</span>
+                <span className="truncate">{itemToEdit ? 'Edit AI Entry' : 'Gemini AI Food Estimator'}</span>
                 <span className="text-[10px] font-mono font-medium px-1.5 sm:px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shrink-0">
-                  3.8 Flash
+                  3.1 Flash Lite
                 </span>
               </h3>
               <p className="text-[11px] sm:text-xs text-slate-400 truncate">
-                Describe in text or upload a photo of your meal or nutrition label
+                {itemToEdit ? 'Update your prompt to fix macros' : 'Describe in text or upload a photo of your meal'}
               </p>
             </div>
           </div>
@@ -202,34 +270,32 @@ export const GeminiFoodModal: React.FC<GeminiFoodModalProps> = ({
 
           {/* If Result Ready, Show Rich Breakdown */}
           {analysisResult ? (
-            <div className="bg-slate-950 border border-indigo-500/30 rounded-2xl p-5 space-y-5">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <div className="flex items-center gap-2">
+            <div className="bg-slate-950 border border-indigo-500/30 rounded-2xl p-4 sm:p-5 space-y-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="text-xs font-mono text-indigo-400 uppercase tracking-wide">
                       AI Verified Nutrition
                     </span>
                     {analysisResult.confidence && (
-                      <span className="text-[11px] text-slate-400">
-                        · Confidence: {analysisResult.confidence}
+                      <span className="text-[11px] font-medium px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300">
+                        Confidence: <span className="text-emerald-400 capitalize">{analysisResult.confidence}</span>
                       </span>
                     )}
                   </div>
-                  <h4 className="text-xl font-bold text-slate-100 mt-1">{analysisResult.foodName}</h4>
-                  <p className="text-xs text-slate-400 mt-0.5">
+                  <h4 className="text-lg sm:text-xl font-bold text-slate-100">{analysisResult.foodName}</h4>
+                  <p className="text-xs text-slate-400">
                     Estimated Portion: {analysisResult.servingSize} (approx. {analysisResult.servingWeightGrams}g)
                   </p>
                 </div>
 
                 <button
-                  onClick={handleReset}
-                  className="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 bg-slate-900 hover:bg-slate-800 rounded-lg border border-slate-800 transition-colors flex items-center gap-1.5 shrink-0"
+                  onClick={() => setAnalysisResult(null)}
+                  className="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 bg-slate-900 hover:bg-slate-800 rounded-lg border border-slate-800 transition-colors flex items-center gap-1.5 shrink-0 cursor-pointer"
                 >
-                  <RefreshCw className="w-3.5 h-3.5" /> Analyze Another
+                  <RefreshCw className="w-3.5 h-3.5" /> Adjust Prompt
                 </button>
               </div>
-
-
 
               {/* Macro Cards Grid */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
@@ -276,27 +342,32 @@ export const GeminiFoodModal: React.FC<GeminiFoodModalProps> = ({
                 <span>Sodium: {Math.round((analysisResult.sodiumMg || 0) * servingMult)}mg</span>
               </div>
 
-              {/* Itemized Meal Components (if multiple parts) */}
+              {/* Itemized Meal Components */}
               {analysisResult.breakdown && analysisResult.breakdown.length > 0 && (
                 <div className="space-y-2 pt-2 border-t border-slate-800/80">
                   <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
                     <Layers className="w-3.5 h-3.5 text-indigo-400" /> Detected Ingredients &amp; Portions
                   </span>
-                  <div className="space-y-1.5">
+                  <div className="space-y-2">
                     {analysisResult.breakdown.map((part: any, idx: number) => (
                       <div
                         key={idx}
-                        className="flex items-center justify-between p-2.5 bg-slate-900/50 rounded-lg text-xs"
+                        className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-slate-900/70 rounded-xl border border-slate-800/80 text-xs"
                       >
-                        <div className="text-slate-200">
-                          <span className="font-medium">{part.item}</span>
-                          <span className="text-slate-500 ml-2">({part.portion})</span>
+                        <div className="min-w-0 flex-1 pr-2">
+                          <span className="font-semibold text-slate-200 block truncate">{part.item}</span>
+                          <span className="text-[11px] text-slate-400 font-mono">Portion: {part.portion}</span>
                         </div>
-                        <div className="font-mono text-slate-400 flex items-center gap-3">
-                          <span className="text-emerald-400 font-semibold">{Math.round(part.calories * servingMult)} kcal</span>
-                          <span>P: {Math.round(part.protein * servingMult)}g</span>
-                          <span>C: {Math.round(part.carbs * servingMult)}g</span>
-                          <span>F: {Math.round(part.fat * servingMult)}g</span>
+
+                        <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800/60 font-mono shrink-0">
+                          <span className="text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-md">
+                            {Math.round(part.calories * servingMult)} kcal
+                          </span>
+                          <div className="flex items-center gap-2 text-slate-400 text-[11px]">
+                            <span>P:{Math.round(part.protein * servingMult)}g</span>
+                            <span>C:{Math.round(part.carbs * servingMult)}g</span>
+                            <span>F:{Math.round(part.fat * servingMult)}g</span>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -334,7 +405,7 @@ export const GeminiFoodModal: React.FC<GeminiFoodModalProps> = ({
                 className="w-full py-3.5 px-4 bg-indigo-500 hover:bg-indigo-400 text-white font-bold text-sm rounded-xl transition-all shadow-lg shadow-indigo-500/25 flex items-center justify-center gap-2 cursor-pointer"
               >
                 <CheckCircle className="w-5 h-5" />
-                Add to {selectedMeal.charAt(0).toUpperCase() + selectedMeal.slice(1)} (
+                {itemToEdit ? 'Save Edited Entry' : `Add to ${selectedMeal.charAt(0).toUpperCase() + selectedMeal.slice(1)}`} (
                 {Math.round(analysisResult.calories * servingMult)} kcal)
               </button>
             </div>
@@ -366,47 +437,56 @@ export const GeminiFoodModal: React.FC<GeminiFoodModalProps> = ({
                   <span className="truncate">Photo Upload</span>
                 </button>
               </div>
-
+    
               {activeTab === 'text' ? (
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-2">
-                      Describe what you ate or drank:
+                    <label className="block text-xs font-semibold text-slate-300 mb-2 flex items-center justify-between">
+                      <span>{itemToEdit ? 'Modify your previous prompt:' : 'Describe what you ate or drank:'}</span>
+                      {isAnalyzing && (
+                        <button onClick={() => abortControllerRef.current?.abort()} className="text-rose-400 hover:text-rose-300 underline cursor-pointer">
+                          Cancel
+                        </button>
+                      )}
                     </label>
                     <textarea
-                      rows={3}
+                      rows={4}
                       value={textInput}
                       onChange={(e) => setTextInput(e.target.value)}
+                      disabled={isAnalyzing}
                       placeholder="e.g. 150g grilled ribeye steak with a baked sweet potato and 1 cup sauteed green beans in butter..."
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors resize-none"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors resize-none disabled:opacity-50"
                     />
                   </div>
 
-                  {/* Preset Quick Injections */}
-                  <div className="space-y-2">
-                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
-                      Quick Ideas (Click to Test)
-                    </span>
-                    <div className="space-y-1.5">
-                      {QUICK_PROMPT_PRESETS.map((preset, i) => (
-                        <button
-                          key={i}
-                          type="button"
-                          onClick={() => setTextInput(preset)}
-                          className="w-full p-2.5 text-left text-xs bg-slate-950 hover:bg-slate-800/80 border border-slate-800/70 hover:border-slate-700 rounded-xl text-slate-300 hover:text-indigo-300 transition-all flex items-center justify-between group"
-                        >
-                          <span className="truncate pr-2">{preset}</span>
-                          <ChevronRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-indigo-400 shrink-0" />
-                        </button>
-                      ))}
+                  {/* Preset Quick Injections (Hide when editing) */}
+                  {!itemToEdit && (
+                    <div className="space-y-2">
+                      <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
+                        Quick Ideas (Click to Test)
+                      </span>
+                      <div className="space-y-1.5">
+                        {QUICK_PROMPT_PRESETS.map((preset, i) => (
+                          <button
+                            key={i}
+                            type="button"
+                            onClick={() => setTextInput(preset)}
+                            disabled={isAnalyzing}
+                            className="w-full p-2.5 text-left text-xs bg-slate-950 hover:bg-slate-800/80 border border-slate-800/70 hover:border-slate-700 rounded-xl text-slate-300 hover:text-indigo-300 transition-all flex items-center justify-between group disabled:opacity-50 cursor-pointer"
+                          >
+                            <span className="truncate pr-2">{preset}</span>
+                            <ChevronRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-indigo-400 shrink-0" />
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-4">
                   <div
-                    onClick={() => fileInputRef.current?.click()}
-                    className="border-2 border-dashed border-slate-700 hover:border-indigo-500/80 bg-slate-950/60 rounded-2xl p-6 text-center cursor-pointer transition-all hover:bg-slate-900/40"
+                    onClick={() => !isAnalyzing && fileInputRef.current?.click()}
+                    className={`border-2 border-dashed border-slate-700 bg-slate-950/60 rounded-2xl p-6 text-center transition-all ${isAnalyzing ? 'opacity-50 cursor-not-allowed' : 'hover:border-indigo-500/80 hover:bg-slate-900/40 cursor-pointer'}`}
                   >
                     <input
                       ref={fileInputRef}
@@ -414,6 +494,7 @@ export const GeminiFoodModal: React.FC<GeminiFoodModalProps> = ({
                       accept="image/*"
                       onChange={handleImageUpload}
                       className="hidden"
+                      disabled={isAnalyzing}
                     />
 
                     {imagePreview ? (
@@ -444,15 +525,21 @@ export const GeminiFoodModal: React.FC<GeminiFoodModalProps> = ({
 
                   {imagePreview && (
                     <div>
-                      <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                        Optional note or context for AI:
+                      <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center justify-between">
+                        <span>Optional note or context for AI:</span>
+                        {isAnalyzing && (
+                          <button onClick={() => abortControllerRef.current?.abort()} className="text-rose-400 hover:text-rose-300 underline cursor-pointer">
+                            Cancel
+                          </button>
+                        )}
                       </label>
                       <input
                         type="text"
                         value={textInput}
                         onChange={(e) => setTextInput(e.target.value)}
+                        disabled={isAnalyzing}
                         placeholder="e.g. Dressing on the side, cooked in olive oil, no cheese..."
-                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 disabled:opacity-50"
                       />
                     </div>
                   )}
@@ -464,14 +551,14 @@ export const GeminiFoodModal: React.FC<GeminiFoodModalProps> = ({
                   <div className="flex items-start gap-2">
                     <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                     <div>
-                      <span className="font-semibold block">Temporary Service Spike</span>
+                      <span className="font-semibold block">Error processing request</span>
                       <span>{errorMsg}</span>
                     </div>
                   </div>
                   <button
                     type="button"
                     onClick={handleAnalyze}
-                    className="px-2.5 py-1 bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-500/40 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors"
+                    className="px-2.5 py-1 bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-500/40 rounded-xl text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer"
                   >
                     Retry Now
                   </button>
@@ -486,13 +573,13 @@ export const GeminiFoodModal: React.FC<GeminiFoodModalProps> = ({
               >
                 {isAnalyzing ? (
                   <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Analyzing nutrition &amp; portion macros...</span>
+                    <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                    <span className="truncate">{statusMessage || 'Analyzing nutrition & portion macros...'}</span>
                   </>
                 ) : (
                   <>
-                    <Sparkles className="w-4 h-4" />
-                    <span>Calculate Macros with Gemini AI</span>
+                    <Sparkles className="w-4 h-4 shrink-0" />
+                    <span>{itemToEdit ? 'Re-Calculate Macros' : 'Calculate Macros with Gemini AI'}</span>
                   </>
                 )}
               </button>

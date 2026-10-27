@@ -23,7 +23,7 @@ app.get(['/manifest.json', '/manifest.webmanifest'], (_req, res) => {
 });
 
 const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY,
+  apiKey: "", // <-- Paste your raw string key here!
   httpOptions: {
     headers: {
       'User-Agent': 'aistudio-build',

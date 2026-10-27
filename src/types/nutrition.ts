@@ -17,6 +17,7 @@ export interface FoodItem {
   barcode?: string;
   imageUrl?: string;
   source: 'ai' | 'barcode' | 'manual' | 'preset';
+  originalPrompt?: string;
   confidence?: 'high' | 'medium' | 'low';
   dietaryTags?: string[];
   healthTip?: string;
@@ -24,7 +25,7 @@ export interface FoodItem {
   mealType: MealType;
 }
 
-export type HealthGoal = 'lose_weight' | 'maintain' | 'gain_muscle' | 'keto' | 'high_protein';
+export type HealthGoal = 'lose_weight' | 'maintain' | 'gain_muscle';
 export type ActivityLevel = 'sedentary' | 'light' | 'moderate' | 'very_active';
 
 export interface UserProfile {
@@ -77,6 +78,7 @@ export interface SavedFood {
   sodiumMg?: number;
   notes?: string;
   createdAt: string;
+  originalPrompt?: string;
 }
 
 export interface WorkoutSet {

@@ -1,3 +1,4 @@
+// src/components/StatisticsTab.tsx
 import React, { useState } from 'react';
 import { DailyLog, MacroTotals, UserProfile, FoodItem } from '../types/nutrition';
 import { calculateTotals } from '../services/storage';
@@ -13,6 +14,7 @@ import {
   PieChart,
   ChevronRight,
   Info,
+  Activity,
 } from 'lucide-react';
 
 interface StatisticsTabProps {
@@ -49,21 +51,24 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
   const dailyMetrics = rangeDates.map((dateStr) => {
     const log = logs[dateStr];
     const items = log?.items || [];
+    const workouts = log?.workouts || [];
     const totals = calculateTotals(items);
     const hasLogged = items.length > 0;
+    const hasWorkouts = workouts.length > 0;
 
-    const hitProtein = hasLogged && totals.protein >= profile.targetProtein;
+    const hitProtein = hasLogged && totals.protein >= (profile.targetProtein || 120);
     // Calorie adherence: consumed is within target + 100 kcal, and at least 70% of target
     const hitCalories =
       hasLogged &&
-      totals.calories <= profile.targetCalories + 100 &&
-      totals.calories >= profile.targetCalories * 0.7;
+      totals.calories <= (profile.targetCalories || 2000) + 100 &&
+      totals.calories >= (profile.targetCalories || 2000) * 0.7;
 
     const isPerfect = hitProtein && hitCalories;
 
     return {
       date: dateStr,
       hasLogged,
+      hasWorkouts,
       totals,
       hitProtein,
       hitCalories,
@@ -315,19 +320,19 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             </p>
           </div>
 
-          {/* Fully wrapping legend - prevents horizontal overflow */}
+          {/* Unified Legend: Yellow=Perfect, Blue=Protein, Green=Calories */}
           <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-[11px] sm:text-xs font-mono text-slate-400">
             <div className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 rounded bg-emerald-400 shadow-sm shrink-0" />
-              <span>Perfect</span>
+              <div className="w-2.5 h-2.5 rounded bg-amber-400 shadow-[0_0_6px_#fbbf24] shrink-0" />
+              <span>Perfect (Gold)</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 rounded bg-cyan-400 shadow-sm shrink-0" />
-              <span>Protein Hit</span>
+              <div className="w-2.5 h-2.5 rounded bg-blue-400 shrink-0" />
+              <span>Protein (Blue)</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 rounded bg-amber-400 shadow-sm shrink-0" />
-              <span>Calories Only</span>
+              <div className="w-2.5 h-2.5 rounded bg-emerald-500 shrink-0" />
+              <span>Calories (Green)</span>
             </div>
             <div className="flex items-center gap-1.5">
               <div className="w-2.5 h-2.5 rounded bg-slate-800 border border-slate-700 shrink-0" />
@@ -356,15 +361,15 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
                     : 'border-slate-800 bg-slate-950/70 hover:border-slate-700 hover:bg-slate-900/80'
                 }`}
               >
-                {/* Status Bar Pip */}
+                {/* Status Bar Pip: Yellow=Perfect, Blue=Protein, Green=Calories */}
                 <div
                   className={`w-full h-1.5 rounded-full mb-2 ${
                     day.isPerfect
-                      ? 'bg-emerald-400'
+                      ? 'bg-amber-400 shadow-[0_0_6px_#fbbf24]'
                       : day.hitProtein
-                      ? 'bg-cyan-400'
+                      ? 'bg-blue-400'
                       : day.hitCalories
-                      ? 'bg-amber-400'
+                      ? 'bg-emerald-500'
                       : day.hasLogged
                       ? 'bg-slate-700'
                       : 'bg-slate-850'
@@ -373,7 +378,14 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
 
                 <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-slate-400 font-mono">
                   <span className="truncate">{formattedDay}</span>
-                  {day.isPerfect && <Award className="w-3.5 h-3.5 text-emerald-400 shrink-0 ml-1" />}
+                  <div className="flex items-center gap-1 shrink-0">
+                    {day.hasWorkouts && (
+                      <span title="Workout logged" className="inline-flex items-center">
+                        <Activity className="w-3 h-3 text-orange-400" />
+                      </span>
+                    )}
+                    {day.isPerfect && <Award className="w-3.5 h-3.5 text-amber-400" />}
+                  </div>
                 </div>
 
                 <div className="mt-1.5 space-y-0.5 font-mono">
@@ -384,7 +396,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
                   <div className="text-[10px] sm:text-[11px] text-cyan-400 tabular-nums truncate">
                     P: {Math.round(day.totals.protein)}g{' '}
                     <span className="text-[9px] sm:text-[10px] text-slate-500">
-                      ({Math.round((day.totals.protein / profile.targetProtein) * 100)}%)
+                      ({Math.round((day.totals.protein / (profile.targetProtein || 120)) * 100)}%)
                     </span>
                   </div>
                 </div>
@@ -416,7 +428,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           {/* Bar Chart Visualization */}
           <div className="space-y-3 pt-2">
             {dailyMetrics.map((day) => {
-              const pct = Math.min(140, Math.round((day.totals.protein / profile.targetProtein) * 100));
+              const pct = Math.min(140, Math.round((day.totals.protein / (profile.targetProtein || 120)) * 100));
               const dayLabel = new Date(day.date + 'T00:00:00').toLocaleDateString('en-US', {
                 weekday: 'short',
                 month: 'numeric',
@@ -442,7 +454,6 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
                   </div>
 
                   <div className="h-2.5 sm:h-3 w-full bg-slate-950 rounded-full overflow-hidden border border-slate-800/80 relative">
-                    {/* Target 100% line indicator */}
                     <div
                       className="absolute top-0 bottom-0 w-0.5 bg-slate-600 z-10"
                       style={{ left: `${Math.min(100, (100 / 140) * 100)}%` }}

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Activity, Flame, RefreshCw, Trash2, Sparkles, Copy, Check, Bookmark } from 'lucide-react';
 import { WorkoutItem, UserProfile, SavedWorkout } from '../types/nutrition';
+import { getStoredApiKey, hasConnectedApiKey } from '../utils/geminiStorage';
 
 interface WorkoutTrackerProps {
   workouts: WorkoutItem[];
@@ -24,30 +25,69 @@ export const WorkoutTracker: React.FC<WorkoutTrackerProps> = ({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [savedRoutineId, setSavedRoutineId] = useState<string | null>(null);
 
+  const apiReady = hasConnectedApiKey();
   const totalBurned = workouts.reduce((sum, w) => sum + w.caloriesBurned, 0);
 
   const handleAnalyzeWorkout = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputText.trim()) return;
+    if (!inputText.trim() || !apiReady) return;
 
     setIsAnalyzing(true);
     try {
-      const res = await fetch('/api/analyze-workout', {
+      const apiKey = getStoredApiKey();
+      if (!apiKey) {
+        return;
+      }
+      
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`;
+
+      const promptText = `Analyze this workout input and estimate calories burned. Return ONLY a raw, minified JSON object with no markdown or formatting.
+      User Profile: ${profile.gender}, ${profile.age} years old, ${profile.weightKg}kg, ${profile.heightCm}cm. Activity Level: ${profile.activityLevel}.
+      Workout Input: "${inputText}"
+      
+      The JSON MUST have these exact keys:
+      description (string: a clean summary of the workout), caloriesBurned (number: integer estimate based on profile), durationMinutes (number: integer), avgBpm (number: estimated average heart rate, or null), sets (array of objects with keys: name, reps, weight).`;
+
+      const requestBody = {
+        contents: [
+          {
+            parts: [{ text: promptText }]
+          }
+        ]
+      };
+
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text: inputText,
-          userProfile: profile,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to analyze workout');
+      const rawText = await res.text();
+
+      if (rawText.trim().startsWith('<')) {
+        console.error("HTML Error Page received:", rawText);
+        throw new Error("Network returned HTML instead of JSON. Check your internet connection.");
+      }
+
+      const resultData = JSON.parse(rawText);
+
+      if (resultData.error) {
+        throw new Error(resultData.error.message || 'Gemini API Error');
+      }
+
+      const modelOutput = resultData.candidates?.[0]?.content?.parts?.[0]?.text;
+      
+      if (!modelOutput) {
+        throw new Error("Invalid response format from Gemini");
+      }
+
+      const cleanedJson = modelOutput.replace(/```json/g, '').replace(/```/g, '').trim();
+      const data = JSON.parse(cleanedJson);
 
       const newItem: WorkoutItem = {
         id: `workout-${Date.now()}`,
-        description: data.description,
-        caloriesBurned: data.caloriesBurned,
+        description: data.description || 'AI Analyzed Workout',
+        caloriesBurned: data.caloriesBurned || 0,
         durationMinutes: data.durationMinutes,
         avgBpm: data.avgBpm,
         sets: data.sets || [],
@@ -58,7 +98,6 @@ export const WorkoutTracker: React.FC<WorkoutTrackerProps> = ({
       setInputText('');
     } catch (err: any) {
       console.error('Workout analysis error:', err);
-      alert(err.message || 'Failed to estimate calories from AI.');
     } finally {
       setIsAnalyzing(false);
     }
@@ -123,14 +162,19 @@ export const WorkoutTracker: React.FC<WorkoutTrackerProps> = ({
           type="text"
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
-          placeholder="e.g. 80 mins biceps, 10 sets..."
-          className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-orange-500"
-          disabled={isAnalyzing}
+          disabled={!apiReady || isAnalyzing}
+          placeholder={apiReady ? "e.g. 80 mins biceps, 10 sets..." : "Connect Gemini API Key in Settings to unlock AI workout logging"}
+          className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-orange-500 disabled:opacity-40 disabled:cursor-not-allowed"
         />
         <button
           type="submit"
-          disabled={isAnalyzing || !inputText.trim()}
-          className="px-3 py-2 bg-orange-500 hover:bg-orange-400 disabled:opacity-50 text-slate-950 font-bold text-xs rounded-xl transition-colors flex items-center gap-1.5 shrink-0 cursor-pointer"
+          disabled={!apiReady || isAnalyzing || !inputText.trim()}
+          title={!apiReady ? "Connect Gemini API Key in Settings to unlock" : "Log Workout"}
+          className={`px-3 py-2 font-bold text-xs rounded-xl transition-colors flex items-center gap-1.5 shrink-0 ${
+            apiReady 
+              ? 'bg-orange-500 hover:bg-orange-400 disabled:opacity-50 text-slate-950 cursor-pointer' 
+              : 'bg-slate-800 text-slate-500 opacity-40 cursor-not-allowed'
+          }`}
         >
           {isAnalyzing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
           <span className="hidden sm:inline">Log Workout</span>
@@ -186,4 +230,4 @@ export const WorkoutTracker: React.FC<WorkoutTrackerProps> = ({
       )}
     </div>
   );
-};  
+};
