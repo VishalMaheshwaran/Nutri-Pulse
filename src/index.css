@@ -20,6 +20,16 @@
     font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
     font-feature-settings: 'tnum' 1;
   }
+
+  /* GLOBAL BUTTON PRESS ANIMATION */
+  button {
+    transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.15s ease;
+    cursor: pointer;
+  }
+
+  button:active {
+    transform: scale(0.96);
+  }
 }
 
 /* Custom scrollbar for sleek dashboard experience */

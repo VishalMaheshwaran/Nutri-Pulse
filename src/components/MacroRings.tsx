@@ -38,11 +38,18 @@ export const MacroRings: React.FC<MacroRingsProps> = ({
   const fiberPct = Math.min(100, Math.round((totals.fiber / profile.targetFiber) * 100));
 
   const triggerCelebration = () => {
-    confetti({
-      particleCount: 80,
-      spread: 70,
-      origin: { y: 0.6 },
-    });
+    setTimeout(() => {
+              confetti({
+                particleCount: 400,
+                spread: 90,
+                origin: { x: 0.5, y: 1 }, 
+                startVelocity: 95, 
+                colors: ['#fbbf24', '#34d399', '#38bdf8', '#f43f5e'],
+                scalar: 1.2, 
+                ticks: 500,
+                zIndex: 9999, 
+              });
+            }, 350);
   };
 
   // Dynamic Progress Status

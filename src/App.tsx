@@ -1,9 +1,6 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import React, { useState, useEffect } from 'react';
+import { Sparkles } from 'lucide-react';
+import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { DailyLog, FoodItem, MealType, UserProfile, SavedFood, WorkoutItem, SavedWorkout } from './types/nutrition';
 import {
   getStoredProfile,
@@ -14,8 +11,8 @@ import {
   saveStoredSavedFoods,
   getTodayDateString,
   calculateTotals,
-  getStoredSavedSavedWorkouts, 
-  saveStoredSavedWorkouts
+  getStoredSavedSavedWorkouts,
+  saveStoredSavedWorkouts,
 } from './services/storage';
 import { TopBar } from './components/TopBar';
 import { MacroRings } from './components/MacroRings';
@@ -32,6 +29,8 @@ import { OfflineIndicator } from './components/OfflineIndicator';
 import { SavedWorkoutsModal } from './components/SavedWorkoutsModal';
 import { GoalCelebrationModal } from './components/GoalCelebrationModal';
 import { LiveMacroWidget } from './components/LiveMacroWidget.tsx';
+import { DailyReportModal } from './components/DailyReportModal';
+import { updateLiveTrackerNotification } from './services/notifications';
 
 export default function App() {
   const [profile, setProfile] = useState<UserProfile>(getStoredProfile);
@@ -47,11 +46,30 @@ export default function App() {
   const [isProfileOpen, setIsProfileOpen] = useState<boolean>(false);
   const [isSavedFoodsOpen, setIsSavedFoodsOpen] = useState<boolean>(false);
   const [isStreakPreviewOpen, setIsStreakPreviewOpen] = useState<boolean>(false);
+  const [isDailyReportOpen, setIsDailyReportOpen] = useState<boolean>(false);
   const [activeMealTarget, setActiveMealTarget] = useState<MealType>('lunch');
   const [activeView, setActiveView] = useState<'dashboard' | 'statistics'>('dashboard');
 
   // State to track which item we are currently editing via the AI Modal
   const [geminiItemToEdit, setGeminiItemToEdit] = useState<FoodItem | undefined>(undefined);
+
+  // Global haptic feedback for all button clicks
+  useEffect(() => {
+    const handleGlobalHaptics = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+
+      const button = target.closest('button');
+      if (button && !button.disabled) {
+        Haptics.impact({ style: ImpactStyle.Light }).catch(() => {
+          // Safely ignore on web browsers where native haptics aren't supported
+        });
+      }
+    };
+
+    window.addEventListener('click', handleGlobalHaptics, true);
+    return () => window.removeEventListener('click', handleGlobalHaptics, true);
+  }, []);
 
   // Sync to localStorage
   useEffect(() => {
@@ -70,6 +88,56 @@ export default function App() {
     saveStoredSavedWorkouts(savedWorkouts);
   }, [savedWorkouts]);
 
+  // 1. Calculate computed variables BEFORE using them in useEffects
+  const currentLog: DailyLog = logs[currentDate] || {
+    date: currentDate,
+    items: [],
+    waterIntakeMl: 0,
+    workouts: [],
+  };
+
+  const totals = calculateTotals(currentLog.items);
+  const burnedCalories = (currentLog.workouts || []).reduce((sum, workout) => sum + workout.caloriesBurned, 0);
+
+  // 2. LIVE TRACKER NOTIFICATION SYNC
+  useEffect(() => {
+    updateLiveTrackerNotification({
+      eatenCalories: totals.calories,
+      targetCalories: currentLog.targetCalories ?? profile.targetCalories ?? 2000,
+      burnedCalories: burnedCalories,
+      proteinGrams: totals.protein,
+      targetProtein: currentLog.targetProtein ?? profile.targetProtein ?? 120,
+      waterMl: currentLog.waterIntakeMl || 0,
+    });
+  }, [totals.calories, totals.protein, burnedCalories, currentLog, profile]);
+
+  // 3. LISTEN FOR NOTIFICATION ACTION TAPS (+250ml Water, Log Meal, Stats)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && (window as any).Capacitor) {
+      import('@capacitor/local-notifications').then(({ LocalNotifications }) => {
+        LocalNotifications.addListener('localNotificationActionPerformed', (notificationAction) => {
+          if (notificationAction.actionId === 'add_water') {
+            // Add water safely using the functional state updater
+            setLogs((prev) => {
+              const prevLog = prev[currentDate] || { date: currentDate, items: [], waterIntakeMl: 0, workouts: [] };
+              return {
+                ...prev,
+                [currentDate]: { ...prevLog, waterIntakeMl: (prevLog.waterIntakeMl || 0) + 250 },
+              };
+            });
+          } else if (notificationAction.actionId === 'log_meal') {
+            setActiveView('dashboard');
+            setActiveMealTarget('lunch'); // Open for lunch by default
+            setIsGeminiOpen(true);
+          } else if (notificationAction.actionId === 'view_stats') {
+            setActiveView('statistics');
+          }
+        });
+      }).catch(err => console.warn('Capacitor notifications not loaded', err));
+    }
+  }, [currentDate]); // Only rebind if currentDate changes
+
+  // Handlers
   const handleSaveRoutine = (workout: WorkoutItem) => {
     const newRoutine: SavedWorkout = {
       id: `routine-${Date.now()}`,
@@ -106,18 +174,6 @@ export default function App() {
     setSavedWorkouts((prev) => prev.filter((r) => r.id !== id));
   };
 
-  // Current day's log
-  const currentLog: DailyLog = logs[currentDate] || {
-    date: currentDate,
-    items: [],
-    waterIntakeMl: 0,
-    workouts: [],
-  };
-
-  const totals = calculateTotals(currentLog.items);
-  const burnedCalories = (currentLog.workouts || []).reduce((sum, workout) => sum + workout.caloriesBurned, 0);
-  
-  // Handlers
   const handleFoodLogged = (newItem: FoodItem) => {
     const updatedItems = [newItem, ...currentLog.items];
     setLogs((prev) => ({
@@ -190,7 +246,7 @@ export default function App() {
         },
       };
     });
-    
+
     setCurrentDate(todayDate);
   };
 
@@ -222,7 +278,7 @@ export default function App() {
         },
       };
     });
-    
+
     setCurrentDate(todayDate);
   };
 
@@ -354,7 +410,7 @@ export default function App() {
   const snackItems = currentLog.items.filter((i) => i.mealType === 'snack');
 
   return (
-    <div 
+    <div
       className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans w-full"
       style={{ paddingTop: 'calc(env(safe-area-inset-top) + 70px)' }}
     >
@@ -362,9 +418,9 @@ export default function App() {
       <TopBar
         currentDate={currentDate}
         onDateChange={setCurrentDate}
-        onOpenBarcode={() => openBarcodeForMeal('lunch')}
-        onOpenGemini={() => openGeminiForMeal('lunch')}
-        onOpenSavedFoods={() => openSavedFoodsForMeal('breakfast')}
+        onOpenBarcode={() => openBarcodeForMeal(activeMealTarget)}
+        onOpenGemini={() => openGeminiForMeal(activeMealTarget)}
+        onOpenSavedFoods={() => openSavedFoodsForMeal(activeMealTarget)}
         onOpenProfile={() => setIsProfileOpen(true)}
         activeView={activeView}
         setActiveView={setActiveView}
@@ -374,10 +430,9 @@ export default function App() {
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6 pb-28 md:pb-8 space-y-4 sm:space-y-6 overflow-x-hidden">
-
         {activeView === 'dashboard' && (
           <div className="space-y-5 sm:space-y-7 w-full">
-            {/* NEW: Live Macro Widget & Locked Notification Controller */}
+            {/* Live Macro Widget & Locked Notification Controller */}
             <LiveMacroWidget
               totals={totals}
               profile={profile}
@@ -387,21 +442,29 @@ export default function App() {
             />
 
             {/* Primary Macronutrient Rings & Goals */}
-            <MacroRings 
-              totals={totals} 
-              profile={profile} 
-              caloriesBurned={burnedCalories} 
+            <MacroRings
+              totals={totals}
+              profile={profile}
+              caloriesBurned={burnedCalories}
             />
 
             {/* Meal Sections Grid */}
             <div className="space-y-4 sm:space-y-5 w-full">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <div>
                   <h2 className="text-base sm:text-lg font-bold text-slate-100">Daily Food &amp; Meal Log</h2>
                   <p className="text-xs text-slate-400">
                     Grouped by breakfast, lunch, dinner, and afternoon/evening snacks
                   </p>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setIsDailyReportOpen(true)}
+                  className="shrink-0 py-2 px-3.5 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 rounded-xl text-xs font-bold text-emerald-400 flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Sparkles className="w-4 h-4 animate-badge-blink" />
+                  AI Daily Report
+                </button>
               </div>
 
               <div className="grid grid-cols-1 gap-4 sm:gap-5 w-full">
@@ -507,6 +570,7 @@ export default function App() {
               setCurrentDate(selectedDate);
               setActiveView('dashboard');
             }}
+            onOpenDailyReport={() => setIsDailyReportOpen(true)}
           />
         )}
       </main>
@@ -514,7 +578,7 @@ export default function App() {
       {/* Footer */}
       <footer className="border-t border-slate-900 bg-slate-950 py-6 px-4 text-center text-xs text-slate-500 w-full">
         <p>
-          NutriPulse · Powered by Google Gemini 3.1 Flash Lite &amp; AI Vision Intelligence
+          NutriPulse · Powered by Google Gemini 1.5 Flash &amp; AI Vision Intelligence
         </p>
       </footer>
 
@@ -544,12 +608,13 @@ export default function App() {
       />
 
       <SavedFoodsModal
+        key={activeMealTarget}
         isOpen={isSavedFoodsOpen}
         onClose={() => setIsSavedFoodsOpen(false)}
-        savedFoods={savedFoods}
-        onLogSavedFood={handleLogSavedFood}
+        savedFoods={savedFoods as any}
+        onLogSavedFood={handleLogSavedFood as any}
         onDeleteSavedFood={handleDeleteSavedFood}
-        onAddCustomSavedFood={handleAddCustomSavedFood}
+        onAddCustomSavedFood={handleAddCustomSavedFood as any}
         defaultMeal={activeMealTarget}
       />
 
@@ -568,12 +633,20 @@ export default function App() {
         onDeleteSavedWorkout={handleDeleteSavedWorkout}
       />
 
-      {/* NEW: Next-Day Goal Streak & AI Celebratory Popup */}
+      {/* Next-Day Goal Streak & AI Celebratory Popup */}
       <GoalCelebrationModal
         logs={logs}
         profile={profile}
         forceOpenTest={isStreakPreviewOpen}
         onCloseTest={() => setIsStreakPreviewOpen(false)}
+      />
+
+      {/* Daily AI Nutrition Report Modal */}
+      <DailyReportModal
+        logs={logs}
+        profile={profile}
+        isOpen={isDailyReportOpen}
+        onClose={() => setIsDailyReportOpen(false)}
       />
 
       {/* Offline Connectivity Toast */}
@@ -583,9 +656,9 @@ export default function App() {
       <MobileBottomNav
         activeView={activeView}
         setActiveView={setActiveView}
-        onOpenBarcode={() => openBarcodeForMeal('lunch')}
-        onOpenGemini={() => openGeminiForMeal('lunch')}
-        onOpenSavedFoods={() => openSavedFoodsForMeal('breakfast')}
+        onOpenBarcode={() => openBarcodeForMeal(activeMealTarget)}
+        onOpenGemini={() => openGeminiForMeal(activeMealTarget)}
+        onOpenSavedFoods={() => openSavedFoodsForMeal(activeMealTarget)}
         onOpenProfile={() => setIsProfileOpen(true)}
       />
     </div>

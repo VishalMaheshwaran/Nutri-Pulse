@@ -2,12 +2,13 @@
 import React, { useState } from 'react';
 import { X, Check, AlertCircle, Loader2, Key, ShieldCheck } from 'lucide-react';
 import { getStoredApiKey, setStoredApiKey } from '../utils/geminiStorage';
+import { useTheme } from '../hooks/useTheme';
 
 interface ApiSettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   onTestStateChange?: (state: 'idle' | 'testing' | 'success' | 'error') => void;
-  onRedirectHome?: () => void; // <--- Callback to go home
+  onRedirectHome?: () => void;
 }
 
 export const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({
@@ -16,10 +17,10 @@ export const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({
   onTestStateChange,
   onRedirectHome,
 }) => {
-  const [apiKeyInput, setApiKeyInput] = useState(getStoredApiKey());
+  const [apiKeyInput, setApiKeyInput] = useState(getStoredApiKey() || '');
   const [testState, setTestState] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [errorText, setErrorText] = useState<string | null>(null);
-
+  const { theme, t, setTheme } = useTheme();
   if (!isOpen) return null;
 
   const updateTestState = (state: 'idle' | 'testing' | 'success' | 'error') => {
@@ -42,7 +43,9 @@ export const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({
     const timeoutId = setTimeout(() => controller.abort(), 5000);
 
     try {
+      // NOTE: If you still get an error, try changing 'gemini-3.1-flash-lite' to 'gemini-1.5-flash'
       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${trimmed}`;
+      
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -51,10 +54,21 @@ export const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({
       });
 
       clearTimeout(timeoutId);
-      const data = await res.json();
+      
+      const data = await res.json().catch(() => null);
 
-      if (data.error || !res.ok) {
-        throw new Error('wrong api key please check and paste the proper one :)');
+      // Handle specific API errors instead of blindly assuming it's the key
+      if (!res.ok || (data && data.error)) {
+        const apiErrorMsg = data?.error?.message || res.statusText;
+        const statusCode = data?.error?.code || res.status;
+
+        // Check if it's explicitly an API key / Authentication error
+        if (statusCode === 400 && apiErrorMsg.toLowerCase().includes('api key')) {
+          throw new Error('wrong api key please check and paste the proper one :)');
+        } else {
+          // If it's a different error (e.g., Model Not Found, Quota Exceeded), show the real error
+          throw new Error(`API Error (${statusCode}): ${apiErrorMsg}`);
+        }
       }
 
       setStoredApiKey(trimmed);
@@ -64,13 +78,21 @@ export const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({
         if (onRedirectHome) {
           onRedirectHome();
         } else {
-          window.location.href = '/'; // Redirects cleanly to home page
+          window.location.href = '/'; 
         }
       }, 800);
+      
     } catch (err: any) {
       clearTimeout(timeoutId);
       updateTestState('error');
-      setErrorText('wrong api key please check and paste the proper one :)');
+      
+      // Handle network timeouts vs actual API errors
+      if (err.name === 'AbortError') {
+        setErrorText('Request timed out. Please check your internet connection.');
+      } else {
+        // Set the dynamic error message we threw in the try block
+        setErrorText(err.message || 'An unknown error occurred');
+      }
     }
   };
 
@@ -114,7 +136,7 @@ export const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({
         {testState === 'error' && (
           <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs text-rose-300 flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>{errorText}</span>
+            <span className="wrap-break-words">{errorText}</span>
           </div>
         )}
 

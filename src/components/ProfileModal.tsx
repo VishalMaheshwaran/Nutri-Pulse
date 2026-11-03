@@ -5,6 +5,7 @@ import { calculateRecommendedMacros, downloadAppDataBackup, uploadAppDataBackup 
 import { getStoredApiKey, setStoredApiKey, hasConnectedApiKey } from '../utils/geminiStorage';
 import { X, CheckCircle, Calculator, Sliders, Droplets, ShieldCheck } from 'lucide-react';
 import { scheduleDailyReminder } from '../services/notifications';
+import { useTheme } from '../hooks/useTheme';
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -34,6 +35,8 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   profile,
   onSaveProfile,
 }) => {
+  const { theme, t, setTheme } = useTheme(); // Initialize Theme Engine
+
   const normalizedGoal: HealthGoal =
     profile.goal === 'lose_weight' || profile.goal === 'gain_muscle' || profile.goal === 'maintain'
       ? profile.goal
@@ -180,25 +183,25 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/85 backdrop-blur-md overflow-y-auto">
-      <div className="relative w-full max-w-xl bg-slate-900 border border-slate-800 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] my-auto">
+      <div className={`relative w-full max-w-xl ${t.cardBg} border ${t.cardBorder} rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] my-auto transition-colors`}>
         {/* Header */}
-        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-800 bg-slate-900/90 shrink-0">
+        <div className={`flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b ${t.innerBorder} ${t.cardBg} shrink-0 transition-colors`}>
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
+            <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl ${t.innerBg} border ${t.innerBorder} flex items-center justify-center ${t.accentEmerald} shrink-0 transition-colors`}>
               <Sliders className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
             <div className="min-w-0">
-              <h3 className="text-sm sm:text-base font-bold text-slate-100 truncate">
+              <h3 className={`text-sm sm:text-base font-bold ${t.textPrimary} truncate transition-colors`}>
                 Nutrition Profile &amp; Targets
               </h3>
-              <p className="text-[11px] sm:text-xs text-slate-400 truncate">
+              <p className={`text-[11px] sm:text-xs ${t.textSecondary} truncate transition-colors`}>
                 TDEE calculator and daily macronutrient targets
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 sm:p-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer shrink-0"
+            className={`p-1.5 sm:p-2 ${t.inactiveBtnText} ${t.btnHover} rounded-lg transition-colors cursor-pointer shrink-0`}
             aria-label="Close"
           >
             <X className="w-5 h-5" />
@@ -206,430 +209,467 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-4 sm:p-6 overflow-y-auto space-y-4 sm:space-y-6 flex-1">
-          {/* Biometrics */}
-          <div className="space-y-4">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
-              Personal Body Metrics
-            </span>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">Weight (kg)</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={formData.weightKg ?? ''}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      weightKg: e.target.value === '' ? ('' as any) : parseFloat(e.target.value),
-                    })
-                  }
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono text-slate-100 focus:outline-none focus:border-emerald-500"
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 h-full overflow-hidden">
+          
+          {/* 1. SCROLLABLE CONTENT AREA */}
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-6">
+            
+            {/* Global App Theme Selector */}
+            <div className="space-y-2">
+              <span className={`text-xs font-semibold ${t.textSecondary} uppercase tracking-wider block transition-colors`}>
+                App Theme Settings
+              </span>
+              <div className={`flex items-center gap-3 p-3 rounded-xl border ${t.innerBorder} ${t.innerBg} transition-colors`}>
+                <button 
+                  type="button"
+                  onClick={() => setTheme('default')} 
+                  className={`w-8 h-8 rounded-full bg-slate-900 border-2 transition-all cursor-pointer ${theme === 'default' ? 'border-emerald-500 scale-110 shadow-md' : 'border-transparent hover:scale-105'}`} 
+                  title="Dark Theme" 
                 />
-              </div>
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">Height (cm)</label>
-                <input
-                  type="number"
-                  value={formData.heightCm ?? ''}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      heightCm: e.target.value === '' ? ('' as any) : parseFloat(e.target.value),
-                    })
-                  }
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono text-slate-100 focus:outline-none focus:border-emerald-500"
+                <button 
+                  type="button"
+                  onClick={() => setTheme('white')} 
+                  className={`w-8 h-8 rounded-full bg-white border-2 transition-all cursor-pointer ${theme === 'white' ? 'border-emerald-500 scale-110 shadow-md' : 'border-slate-300 hover:scale-105'}`} 
+                  title="Light Theme" 
                 />
-              </div>
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">Age</label>
-                <input
-                  type="number"
-                  value={formData.age ?? ''}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      age: e.target.value === '' ? ('' as any) : parseInt(e.target.value, 10),
-                    })
-                  }
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono text-slate-100 focus:outline-none focus:border-emerald-500"
+                <button 
+                  type="button"
+                  onClick={() => setTheme('baby_pink')} 
+                  className={`w-8 h-8 rounded-full bg-pink-100 border-2 transition-all cursor-pointer ${theme === 'baby_pink' ? 'border-pink-500 scale-110 shadow-md' : 'border-transparent hover:scale-105'}`} 
+                  title="Baby Pink Theme" 
                 />
-              </div>
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">Biological Sex</label>
-                <select
-                  value={formData.gender}
-                  onChange={(e) => setFormData({ ...formData, gender: e.target.value as any })}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-emerald-500"
-                >
-                  <option value="male">Male</option>
-                  <option value="female">Female</option>
-                  <option value="other">Other</option>
-                </select>
               </div>
             </div>
 
-            {/* Body Fat % */}
-            <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-3">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-semibold text-slate-300">
-                  Body Fat Percentage (Used for Katch-McArdle Formula)
-                </span>
-                <span className="font-mono text-emerald-400 font-bold text-sm">
-                  {formData.bodyFatPct ? `${formData.bodyFatPct}%` : 'Not specified'}
-                </span>
+            {/* Biometrics */}
+            <div className="space-y-4 border-t border-slate-800/40 pt-4">
+              <span className={`text-xs font-semibold ${t.textSecondary} uppercase tracking-wider block transition-colors`}>
+                Personal Body Metrics
+              </span>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div>
+                  <label className={`block text-xs ${t.textSecondary} mb-1 transition-colors`}>Weight (kg)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={formData.weightKg ?? ''}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        weightKg: e.target.value === '' ? ('' as any) : parseFloat(e.target.value),
+                      })
+                    }
+                    className={`w-full ${t.innerBg} border ${t.innerBorder} rounded-xl px-3 py-2 text-xs font-mono ${t.textPrimary} focus:outline-none focus:border-emerald-500 transition-colors`}
+                  />
+                </div>
+                <div>
+                  <label className={`block text-xs ${t.textSecondary} mb-1 transition-colors`}>Height (cm)</label>
+                  <input
+                    type="number"
+                    value={formData.heightCm ?? ''}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        heightCm: e.target.value === '' ? ('' as any) : parseFloat(e.target.value),
+                      })
+                    }
+                    className={`w-full ${t.innerBg} border ${t.innerBorder} rounded-xl px-3 py-2 text-xs font-mono ${t.textPrimary} focus:outline-none focus:border-emerald-500 transition-colors`}
+                  />
+                </div>
+                <div>
+                  <label className={`block text-xs ${t.textSecondary} mb-1 transition-colors`}>Age</label>
+                  <input
+                    type="number"
+                    value={formData.age ?? ''}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        age: e.target.value === '' ? ('' as any) : parseInt(e.target.value, 10),
+                      })
+                    }
+                    className={`w-full ${t.innerBg} border ${t.innerBorder} rounded-xl px-3 py-2 text-xs font-mono ${t.textPrimary} focus:outline-none focus:border-emerald-500 transition-colors`}
+                  />
+                </div>
+                <div>
+                  <label className={`block text-xs ${t.textSecondary} mb-1 transition-colors`}>Biological Sex</label>
+                  <select
+                    value={formData.gender}
+                    onChange={(e) => setFormData({ ...formData, gender: e.target.value as any })}
+                    className={`w-full ${t.innerBg} border ${t.innerBorder} rounded-xl px-3 py-2 text-xs ${t.textPrimary} focus:outline-none focus:border-emerald-500 transition-colors`}
+                  >
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
               </div>
 
-              <div className="flex items-center gap-3">
-                <input
-                  type="range"
-                  min="5"
-                  max="45"
-                  step="0.5"
-                  value={formData.bodyFatPct || 15}
-                  onChange={(e) => setFormData({ ...formData, bodyFatPct: parseFloat(e.target.value) })}
-                  className="flex-1 accent-emerald-500 cursor-pointer h-2 bg-slate-900 rounded-lg"
-                />
-                <input
-                  type="number"
-                  step="0.5"
-                  min="3"
-                  max="60"
-                  value={formData.bodyFatPct ?? ''}
-                  placeholder="e.g. 15"
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      bodyFatPct: e.target.value === '' ? undefined : parseFloat(e.target.value),
-                    })
-                  }
-                  className="w-20 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs font-mono text-right text-emerald-400 font-bold focus:outline-none focus:border-emerald-500"
-                />
-                <span className="text-xs text-slate-400 font-mono">%</span>
+              {/* Body Fat % */}
+              <div className={`p-4 ${t.innerBg} border ${t.innerBorder} rounded-xl space-y-3 transition-colors`}>
+                <div className="flex items-center justify-between text-xs">
+                  <span className={`font-semibold ${t.textPrimary} transition-colors`}>
+                    Body Fat Percentage (Used for Katch-McArdle)
+                  </span>
+                  <span className={`font-mono ${t.accentEmerald} font-bold text-sm transition-colors`}>
+                    {formData.bodyFatPct ? `${formData.bodyFatPct}%` : 'Not specified'}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min="5"
+                    max="45"
+                    step="0.5"
+                    value={formData.bodyFatPct || 15}
+                    onChange={(e) => setFormData({ ...formData, bodyFatPct: parseFloat(e.target.value) })}
+                    className={`flex-1 accent-emerald-500 cursor-pointer h-2 ${t.cardBg} rounded-lg transition-colors`}
+                  />
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="3"
+                    max="60"
+                    value={formData.bodyFatPct ?? ''}
+                    placeholder="e.g. 15"
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        bodyFatPct: e.target.value === '' ? undefined : parseFloat(e.target.value),
+                      })
+                    }
+                    className={`w-20 ${t.cardBg} border ${t.cardBorder} rounded-lg px-2 py-1 text-xs font-mono text-right ${t.accentEmerald} font-bold focus:outline-none focus:border-emerald-500 transition-colors`}
+                  />
+                  <span className={`text-xs ${t.textSecondary} font-mono transition-colors`}>%</span>
+                </div>
+
+                {formData.bodyFatPct && formData.bodyFatPct > 3 && formData.weightKg && (
+                  <div className={`pt-2 border-t ${t.innerBorder} flex flex-wrap items-center justify-between gap-2 text-[11px] sm:text-xs font-mono transition-colors`}>
+                    <div className={t.textSecondary}>
+                      Lean Body Mass (LBM):{' '}
+                      <strong className={t.accentCyan}>
+                        {(formData.weightKg * (1 - formData.bodyFatPct / 100)).toFixed(1)} kg
+                      </strong>
+                    </div>
+                    <div className={t.textSecondary}>
+                      Fat Mass:{' '}
+                      <strong className={t.accentAmber}>
+                        {(formData.weightKg * (formData.bodyFatPct / 100)).toFixed(1)} kg
+                      </strong>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Goal & Activity */}
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className={`block text-xs ${t.textSecondary} mb-1.5 font-semibold transition-colors`}>Primary Goal</label>
+                  <select
+                    value={formData.goal}
+                    onChange={(e) => setFormData({ ...formData, goal: e.target.value as HealthGoal })}
+                    className={`w-full ${t.innerBg} border ${t.innerBorder} rounded-xl px-3 py-2.5 text-xs ${t.textPrimary} focus:outline-none focus:border-emerald-500 transition-colors`}
+                  >
+                    <option value="lose_weight">Fat Loss / Caloric Deficit</option>
+                    <option value="gain_muscle">Muscle Build / Lean Bulk</option>
+                    <option value="maintain">Weight Maintenance</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className={`block text-xs ${t.textSecondary} mb-1.5 font-semibold transition-colors`}>Activity Level</label>
+                  <select
+                    value={formData.activityLevel}
+                    onChange={(e) =>
+                      setFormData({ ...formData, activityLevel: e.target.value as ActivityLevel })
+                    }
+                    className={`w-full ${t.innerBg} border ${t.innerBorder} rounded-xl px-3 py-2.5 text-xs ${t.textPrimary} focus:outline-none focus:border-emerald-500 transition-colors`}
+                  >
+                    <option value="sedentary">Sedentary (Desk Job)</option>
+                    <option value="light">Lightly Active (1-3 days/wk)</option>
+                    <option value="moderate">Moderately Active (3-5 days/wk)</option>
+                    <option value="very_active">Very Active (6-7 days/wk)</option>
+                  </select>
+                </div>
               </div>
 
-              {formData.bodyFatPct && formData.bodyFatPct > 3 && formData.weightKg && (
-                <div className="pt-2 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-[11px] sm:text-xs font-mono">
-                  <div className="text-slate-400">
-                    Lean Body Mass (LBM):{' '}
-                    <strong className="text-cyan-400">
-                      {(formData.weightKg * (1 - formData.bodyFatPct / 100)).toFixed(1)} kg
-                    </strong>
-                  </div>
-                  <div className="text-slate-400">
-                    Fat Mass:{' '}
-                    <strong className="text-amber-400">
-                      {(formData.weightKg * (formData.bodyFatPct / 100)).toFixed(1)} kg
-                    </strong>
-                  </div>
+              {/* Active Plan Streak Requirement Banner */}
+              <div className={`p-3 ${t.innerBg} border border-emerald-500/30 rounded-xl flex items-start gap-2.5 text-xs transition-colors`}>
+                <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold text-emerald-500 block">{activeGoalBehavior.title}</span>
+                  <span className={t.textSecondary}>{activeGoalBehavior.rule}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Auto Calculate Button */}
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={handleRecalculate}
+                className={`w-full py-2.5 px-4 ${t.innerBg} ${t.btnHover} border ${t.innerBorder} rounded-xl text-xs font-semibold ${t.accentEmerald} flex items-center justify-center gap-2 transition-colors cursor-pointer`}
+              >
+                <Calculator className="w-4 h-4" />
+                Auto-Calculate TDEE, Macros &amp; Water
+              </button>
+              {lastCalculatedTdee && (
+                <div className="text-[11px] text-center p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-500 font-medium">
+                  Expected Maintenance (TDEE): <strong>{lastCalculatedTdee} kcal</strong>. Target adjusted for your goal below.
                 </div>
               )}
             </div>
-          </div>
 
-          {/* Goal & Activity */}
-          <div className="space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs text-slate-400 mb-1.5 font-semibold">Primary Goal</label>
-                <select
-                  value={formData.goal}
-                  onChange={(e) => setFormData({ ...formData, goal: e.target.value as HealthGoal })}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-emerald-500"
+            {/* Daily Targets & Sliders */}
+            <div className={`space-y-4 pt-3 border-t ${t.innerBorder} transition-colors`}>
+              <div className="flex items-center justify-between">
+                <span className={`text-xs font-semibold ${t.textSecondary} uppercase tracking-wider transition-colors`}>
+                  Daily Calorie Target &amp; Macro Sliders
+                </span>
+                <span
+                  className={`text-[11px] font-mono px-2 py-0.5 rounded-lg border ${
+                    Math.abs(totalMacroCals - currentCals) < 25
+                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500'
+                      : 'bg-amber-500/10 border-amber-500/30 text-amber-500'
+                  }`}
                 >
-                  <option value="lose_weight">Fat Loss / Caloric Deficit</option>
-                  <option value="gain_muscle">Muscle Build / Lean Bulk</option>
-                  <option value="maintain">Weight Maintenance</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs text-slate-400 mb-1.5 font-semibold">Activity Level</label>
-                <select
-                  value={formData.activityLevel}
-                  onChange={(e) =>
-                    setFormData({ ...formData, activityLevel: e.target.value as ActivityLevel })
-                  }
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-emerald-500"
-                >
-                  <option value="sedentary">Sedentary (Desk Job)</option>
-                  <option value="light">Lightly Active (1-3 days/wk)</option>
-                  <option value="moderate">Moderately Active (3-5 days/wk)</option>
-                  <option value="very_active">Very Active (6-7 days/wk)</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Active Plan Streak Requirement Banner */}
-            <div className="p-3 bg-emerald-500/10 border border-emerald-500/25 rounded-xl flex items-start gap-2.5 text-xs">
-              <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-              <div>
-                <span className="font-bold text-emerald-300 block">{activeGoalBehavior.title}</span>
-                <span className="text-slate-300 text-[11px]">{activeGoalBehavior.rule}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Auto Calculate Button */}
-          <div className="space-y-2">
-            <button
-              type="button"
-              onClick={handleRecalculate}
-              className="w-full py-2.5 px-4 bg-slate-950 hover:bg-slate-800 border border-slate-700/80 rounded-xl text-xs font-semibold text-emerald-400 flex items-center justify-center gap-2 transition-colors cursor-pointer"
-            >
-              <Calculator className="w-4 h-4" />
-              Auto-Calculate TDEE, Macros &amp; Water
-            </button>
-            {lastCalculatedTdee && (
-              <div className="text-[11px] text-center p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-400 font-medium">
-                Expected Maintenance (TDEE): <strong>{lastCalculatedTdee} kcal</strong>. Target adjusted for your goal below.
-              </div>
-            )}
-          </div>
-
-          {/* Daily Targets & Sliders */}
-          <div className="space-y-4 pt-3 border-t border-slate-800">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                Daily Calorie Target &amp; Macro Sliders
-              </span>
-              <span
-                className={`text-[11px] font-mono px-2 py-0.5 rounded-lg border ${
-                  Math.abs(totalMacroCals - currentCals) < 25
-                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                    : 'bg-amber-500/10 border-amber-500/30 text-amber-400'
-                }`}
-              >
-                Sum: {totalMacroCals} / {currentCals} kcal
-              </span>
-            </div>
-
-            <div className="p-3 bg-slate-950 rounded-xl border border-slate-800">
-              <label className="block text-[11px] text-slate-400 mb-1 font-medium">
-                Target Calories (kcal)
-              </label>
-              <input
-                type="number"
-                value={formData.targetCalories ?? ''}
-                onChange={(e) => handleCaloriesChange(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-base font-mono text-emerald-400 font-bold focus:outline-none focus:border-emerald-500"
-              />
-            </div>
-
-            {/* Protein Slider */}
-            <div className="p-3.5 bg-slate-950 rounded-xl border border-slate-800 space-y-2.5">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-cyan-400 font-bold flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-cyan-400 inline-block"></span> Protein Target
+                  Sum: {totalMacroCals} / {currentCals} kcal
                 </span>
-                <div className="flex items-center gap-2 font-mono">
-                  <input
-                    type="number"
-                    min="0"
-                    max={maxProteinLimit > 0 ? maxProteinLimit : 500}
-                    value={formData.targetProtein ?? ''}
-                    onChange={(e) =>
-                      handleProteinChange(e.target.value === '' ? 0 : parseInt(e.target.value, 10))
-                    }
-                    className="w-16 bg-slate-900 border border-slate-700 rounded-md px-1.5 py-0.5 text-xs text-cyan-400 font-bold text-center focus:outline-none focus:border-cyan-500"
-                  />
-                  <span className="text-slate-400 text-[11px]">g ({proteinCals} kcal)</span>
-                </div>
               </div>
-              <input
-                type="range"
-                min="0"
-                max={maxProteinLimit > 0 ? maxProteinLimit : 500}
-                step="5"
-                value={formData.targetProtein || 0}
-                onChange={(e) => handleProteinChange(parseInt(e.target.value, 10) || 0)}
-                className="w-full accent-cyan-400 cursor-pointer h-2 bg-slate-900 rounded-lg"
-              />
-            </div>
 
-            {/* Carbs Slider */}
-            <div className="p-3.5 bg-slate-950 rounded-xl border border-slate-800 space-y-2.5">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-amber-400 font-bold flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-amber-400 inline-block"></span> Carbohydrates Target
-                </span>
-                <div className="flex items-center gap-2 font-mono">
-                  <input
-                    type="number"
-                    min="0"
-                    max={Math.floor(currentCals / 4)}
-                    value={formData.targetCarbs ?? ''}
-                    onChange={(e) =>
-                      handleCarbChange(e.target.value === '' ? 0 : parseInt(e.target.value, 10))
-                    }
-                    className="w-16 bg-slate-900 border border-slate-700 rounded-md px-1.5 py-0.5 text-xs text-amber-400 font-bold text-center focus:outline-none focus:border-amber-500"
-                  />
-                  <span className="text-slate-400 text-[11px]">g ({carbCals} kcal)</span>
-                </div>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max={Math.floor(currentCals / 4) > 0 ? Math.floor(currentCals / 4) : 500}
-                step="5"
-                value={formData.targetCarbs || 0}
-                onChange={(e) => handleCarbChange(parseInt(e.target.value, 10) || 0)}
-                className="w-full accent-amber-400 cursor-pointer h-2 bg-slate-900 rounded-lg"
-              />
-            </div>
-
-            {/* Fat Slider */}
-            <div className="p-3.5 bg-slate-950 rounded-xl border border-slate-800 space-y-2.5">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-rose-400 font-bold flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-rose-400 inline-block"></span> Fats Target
-                </span>
-                <div className="flex items-center gap-2 font-mono">
-                  <input
-                    type="number"
-                    min="0"
-                    max={Math.floor(currentCals / 9)}
-                    value={formData.targetFat ?? ''}
-                    onChange={(e) =>
-                      handleFatChange(e.target.value === '' ? 0 : parseInt(e.target.value, 10))
-                    }
-                    className="w-16 bg-slate-900 border border-slate-700 rounded-md px-1.5 py-0.5 text-xs text-rose-400 font-bold text-center focus:outline-none focus:border-rose-500"
-                  />
-                  <span className="text-slate-400 text-[11px]">g ({fatCals} kcal)</span>
-                </div>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max={Math.floor(currentCals / 9) > 0 ? Math.floor(currentCals / 9) : 200}
-                step="5"
-                value={formData.targetFat || 0}
-                onChange={(e) => handleFatChange(parseInt(e.target.value, 10) || 0)}
-                className="w-full accent-rose-400 cursor-pointer h-2 bg-slate-900 rounded-lg"
-              />
-            </div>
-
-            {/* Fiber & Water */}
-            <div className="grid grid-cols-2 gap-3 pt-2">
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">Fiber Target (g)</label>
-                <input
-                  type="number"
-                  value={formData.targetFiber ?? ''}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      targetFiber: e.target.value === '' ? ('' as any) : parseInt(e.target.value, 10),
-                    })
-                  }
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono text-slate-100 focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-slate-400 mb-1 flex items-center gap-1">
-                  <Droplets className="w-3.5 h-3.5 text-blue-400" /> Water Goal (ml)
+              <div className={`p-3 ${t.innerBg} rounded-xl border ${t.innerBorder} transition-colors`}>
+                <label className={`block text-[11px] ${t.textSecondary} mb-1 font-medium transition-colors`}>
+                  Target Calories (kcal)
                 </label>
                 <input
                   type="number"
-                  step="100"
-                  min="0"
-                  max="10000"
-                  value={formData.waterGoalMl ?? ''}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      waterGoalMl: e.target.value === '' ? ('' as any) : parseInt(e.target.value, 10),
-                    })
-                  }
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono text-blue-400 font-bold focus:outline-none focus:border-blue-500"
+                  value={formData.targetCalories ?? ''}
+                  onChange={(e) => handleCaloriesChange(e.target.value)}
+                  className={`w-full ${t.cardBg} border ${t.cardBorder} rounded-lg px-3 py-2 text-base font-mono ${t.accentEmerald} font-bold focus:outline-none focus:border-emerald-500 transition-colors`}
                 />
               </div>
-            </div>
-          </div>
 
-          {/* AI Connection & Data Backup Section */}
-          <div className="space-y-3 pt-4 border-t border-slate-800">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
-              AI Connection &amp; Data Backup
-            </span>
-
-            <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-1.5">
-              <div className="flex items-center justify-between text-xs">
-                <label className="text-slate-300 font-medium">Gemini API Key</label>
-                <span
-                  className={`font-mono text-[11px] ${
-                    hasConnectedApiKey() ? 'text-emerald-400' : 'text-amber-400'
-                  }`}
-                >
-                  {hasConnectedApiKey() ? '● Connected (AI Enabled)' : '○ Not Connected (AI Locked)'}
-                </span>
+              {/* Protein Slider */}
+              <div className={`p-3.5 ${t.innerBg} rounded-xl border ${t.innerBorder} space-y-2.5 transition-colors`}>
+                <div className="flex items-center justify-between text-xs">
+                  <span className={`${t.accentCyan} font-bold flex items-center gap-1.5 transition-colors`}>
+                    <span className={`w-2 h-2 rounded-full ${t.bgCyan} inline-block transition-colors`}></span> Protein Target
+                  </span>
+                  <div className="flex items-center gap-2 font-mono">
+                    <input
+                      type="number"
+                      min="0"
+                      max={maxProteinLimit > 0 ? maxProteinLimit : 500}
+                      value={formData.targetProtein ?? ''}
+                      onChange={(e) =>
+                        handleProteinChange(e.target.value === '' ? 0 : parseInt(e.target.value, 10))
+                      }
+                      className={`w-16 ${t.cardBg} border ${t.cardBorder} rounded-md px-1.5 py-0.5 text-xs ${t.accentCyan} font-bold text-center focus:outline-none focus:border-cyan-500 transition-colors`}
+                    />
+                    <span className={`${t.textSecondary} text-[11px] transition-colors`}>g ({proteinCals} kcal)</span>
+                  </div>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max={maxProteinLimit > 0 ? maxProteinLimit : 500}
+                  step="5"
+                  value={formData.targetProtein || 0}
+                  onChange={(e) => handleProteinChange(parseInt(e.target.value, 10) || 0)}
+                  className={`w-full accent-cyan-400 cursor-pointer h-2 ${t.cardBg} rounded-lg transition-colors`}
+                />
               </div>
-              {/* Changed type="password" to type="text" */}
-              <input
-                type="text"
-                defaultValue={getStoredApiKey()}
-                onChange={(e) => setStoredApiKey(e.target.value)}
-                placeholder="Paste your Gemini API key (AIzaSy...)"
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs font-mono text-slate-100 focus:outline-none focus:border-emerald-500"
-              />
+
+              {/* Carbs Slider */}
+              <div className={`p-3.5 ${t.innerBg} rounded-xl border ${t.innerBorder} space-y-2.5 transition-colors`}>
+                <div className="flex items-center justify-between text-xs">
+                  <span className={`${t.accentAmber} font-bold flex items-center gap-1.5 transition-colors`}>
+                    <span className={`w-2 h-2 rounded-full ${t.bgAmber} inline-block transition-colors`}></span> Carbohydrates Target
+                  </span>
+                  <div className="flex items-center gap-2 font-mono">
+                    <input
+                      type="number"
+                      min="0"
+                      max={Math.floor(currentCals / 4)}
+                      value={formData.targetCarbs ?? ''}
+                      onChange={(e) =>
+                        handleCarbChange(e.target.value === '' ? 0 : parseInt(e.target.value, 10))
+                      }
+                      className={`w-16 ${t.cardBg} border ${t.cardBorder} rounded-md px-1.5 py-0.5 text-xs ${t.accentAmber} font-bold text-center focus:outline-none focus:border-amber-500 transition-colors`}
+                    />
+                    <span className={`${t.textSecondary} text-[11px] transition-colors`}>g ({carbCals} kcal)</span>
+                  </div>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max={Math.floor(currentCals / 4) > 0 ? Math.floor(currentCals / 4) : 500}
+                  step="5"
+                  value={formData.targetCarbs || 0}
+                  onChange={(e) => handleCarbChange(parseInt(e.target.value, 10) || 0)}
+                  className={`w-full accent-amber-400 cursor-pointer h-2 ${t.cardBg} rounded-lg transition-colors`}
+                />
+              </div>
+
+              {/* Fat Slider */}
+              <div className={`p-3.5 ${t.innerBg} rounded-xl border ${t.innerBorder} space-y-2.5 transition-colors`}>
+                <div className="flex items-center justify-between text-xs">
+                  <span className={`${t.accentRose} font-bold flex items-center gap-1.5 transition-colors`}>
+                    <span className={`w-2 h-2 rounded-full ${t.bgRose} inline-block transition-colors`}></span> Fats Target
+                  </span>
+                  <div className="flex items-center gap-2 font-mono">
+                    <input
+                      type="number"
+                      min="0"
+                      max={Math.floor(currentCals / 9)}
+                      value={formData.targetFat ?? ''}
+                      onChange={(e) =>
+                        handleFatChange(e.target.value === '' ? 0 : parseInt(e.target.value, 10))
+                      }
+                      className={`w-16 ${t.cardBg} border ${t.cardBorder} rounded-md px-1.5 py-0.5 text-xs ${t.accentRose} font-bold text-center focus:outline-none focus:border-rose-500 transition-colors`}
+                    />
+                    <span className={`${t.textSecondary} text-[11px] transition-colors`}>g ({fatCals} kcal)</span>
+                  </div>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max={Math.floor(currentCals / 9) > 0 ? Math.floor(currentCals / 9) : 200}
+                  step="5"
+                  value={formData.targetFat || 0}
+                  onChange={(e) => handleFatChange(parseInt(e.target.value, 10) || 0)}
+                  className={`w-full accent-rose-400 cursor-pointer h-2 ${t.cardBg} rounded-lg transition-colors`}
+                />
+              </div>
+
+              {/* Fiber & Water */}
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <div>
+                  <label className={`block text-xs ${t.textSecondary} mb-1 transition-colors`}>Fiber Target (g)</label>
+                  <input
+                    type="number"
+                    value={formData.targetFiber ?? ''}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        targetFiber: e.target.value === '' ? ('' as any) : parseInt(e.target.value, 10),
+                      })
+                    }
+                    className={`w-full ${t.innerBg} border ${t.innerBorder} rounded-xl px-3 py-2 text-xs font-mono ${t.textPrimary} focus:outline-none focus:border-emerald-500 transition-colors`}
+                  />
+                </div>
+                <div>
+                  <label className={`flex text-xs ${t.textSecondary} mb-1 items-center gap-1 transition-colors`}>
+                    <Droplets className="w-3.5 h-3.5 text-blue-500" /> Water Goal (ml)
+                  </label>
+                  <input
+                    type="number"
+                    step="100"
+                    min="0"
+                    max="10000"
+                    value={formData.waterGoalMl ?? ''}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        waterGoalMl: e.target.value === '' ? ('' as any) : parseInt(e.target.value, 10),
+                      })
+                    }
+                    className={`w-full ${t.innerBg} border ${t.innerBorder} rounded-xl px-3 py-2 text-xs font-mono text-blue-500 font-bold focus:outline-none focus:border-blue-500 transition-colors`}
+                  />
+                </div>
+              </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            {/* AI Connection & Data Backup Section */}
+            <div className={`space-y-3 pt-4 border-t ${t.innerBorder} transition-colors`}>
+              <span className={`text-xs font-semibold ${t.textSecondary} uppercase tracking-wider block transition-colors`}>
+                AI Connection &amp; Data Backup
+              </span>
+
+              <div className={`p-3 ${t.innerBg} rounded-xl border ${t.innerBorder} space-y-1.5 transition-colors`}>
+                <div className="flex items-center justify-between text-xs">
+                  <label className={`${t.textPrimary} font-medium transition-colors`}>Gemini API Key</label>
+                  <span
+                    className={`font-mono text-[11px] ${
+                      hasConnectedApiKey() ? 'text-emerald-500' : 'text-amber-500'
+                    }`}
+                  >
+                    {hasConnectedApiKey() ? '● Connected (AI Enabled)' : '○ Not Connected (AI Locked)'}
+                  </span>
+                </div>
+                <input
+                  type="text"
+                  defaultValue={getStoredApiKey()}
+                  onChange={(e) => setStoredApiKey(e.target.value)}
+                  placeholder="Paste your Gemini API key (AIzaSy...)"
+                  className={`w-full ${t.cardBg} border ${t.cardBorder} rounded-lg px-3 py-2 text-xs font-mono ${t.textPrimary} focus:outline-none focus:border-emerald-500 transition-colors`}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => downloadAppDataBackup()}
+                  className={`py-2.5 px-3 ${t.innerBg} ${t.btnHover} border ${t.innerBorder} rounded-xl text-xs font-semibold ${t.accentEmerald} flex items-center justify-center gap-2 transition-colors cursor-pointer`}
+                >
+                  Download Data (.json)
+                </button>
+
+                <label className={`py-2.5 px-3 ${t.innerBg} ${t.btnHover} border ${t.innerBorder} rounded-xl text-xs font-semibold ${t.accentCyan} flex items-center justify-center gap-2 transition-colors cursor-pointer text-center`}>
+                  Upload Backup (.json)
+                  <input
+                    type="file"
+                    accept=".json,application/json"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      try {
+                        await uploadAppDataBackup(file);
+                        alert('Backup uploaded successfully!');
+                        window.location.reload();
+                      } catch (err: any) {
+                        console.error('Upload backup failed:', err);
+                        alert(`Upload failed: ${err.message || 'Please check if the file is a valid NutriPulse JSON backup.'}`);
+                      }
+                    }}
+                  />
+                </label>
+              </div>
+            </div>
+
+            {/* Daily Phone Reminders */}
+            <div className={`p-3 ${t.innerBg} rounded-xl border ${t.innerBorder} flex items-center justify-between transition-colors`}>
+              <div className="text-xs">
+                <span className={`font-bold ${t.textPrimary} block transition-colors`}>Daily Phone Reminders</span>
+                <span className={t.textSecondary}>Receive a push notification at 8:00 PM</span>
+              </div>
               <button
                 type="button"
-                onClick={() => downloadAppDataBackup()}
-                className="py-2.5 px-3 bg-slate-950 hover:bg-slate-800 border border-slate-700 rounded-xl text-xs font-semibold text-emerald-400 flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                onClick={async () => {
+                  await scheduleDailyReminder(20, 0);
+                  alert('Phone notifications enabled for 8:00 PM!');
+                }}
+                className={`py-1.5 px-3 ${t.bgIndigo} hover:opacity-90 text-white font-bold text-xs rounded-lg transition-colors cursor-pointer shrink-0 ml-2`}
               >
-                Download Data (.json)
+                Turn On
               </button>
-
-              <label className="py-2.5 px-3 bg-slate-950 hover:bg-slate-800 border border-slate-700 rounded-xl text-xs font-semibold text-cyan-400 flex items-center justify-center gap-2 transition-colors cursor-pointer text-center">
-                Upload Backup (.json)
-                <input
-                  type="file"
-                  accept=".json,application/json"
-                  className="hidden"
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    try {
-                      await uploadAppDataBackup(file);
-                      alert('Backup uploaded successfully!');
-                      window.location.reload();
-                    } catch (err: any) {
-                      console.error('Upload backup failed:', err);
-                      alert(`Upload failed: ${err.message || 'Please check if the file is a valid NutriPulse JSON backup.'}`);
-                    }
-                  }}
-                />
-              </label>
             </div>
           </div>
-          {/* Inside ProfileModal.tsx form, above the submit button */}
-<div className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-between mb-4">
-  <div className="text-xs">
-    <span className="font-bold text-slate-100 block">Daily Phone Reminders</span>
-    <span className="text-slate-400">Receive a native push notification at 8:00 PM</span>
-  </div>
-  <button
-    type="button"
-    onClick={async () => {
-      await scheduleDailyReminder(20, 0);
-      alert('Phone notifications enabled for 8:00 PM!');
-    }}
-    className="py-1.5 px-3 bg-indigo-500 hover:bg-indigo-400 text-white font-bold text-xs rounded-lg transition-colors cursor-pointer"
-  >
-    Turn On
-  </button>
-</div>
-          <button
-            type="submit"
-            className="w-full py-3.5 px-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm rounded-xl transition-all shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 cursor-pointer"
-          >
-            <CheckCircle className="w-5 h-5" />
-            Save Profile &amp; Update Goals
-          </button>
+          
+          {/* 2. FIXED BOTTOM BUTTON AREA (Never overlaps text) */}
+          <div className={`shrink-0 p-4 sm:p-6 ${t.innerBg} border-t ${t.innerBorder} transition-colors`}>
+            <button
+              type="submit"
+              className={`w-full py-3.5 px-4 ${t.activeBtnBg} ${t.activeBtnText} hover:opacity-90 font-bold text-sm rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer`}
+            >
+              <CheckCircle className="w-5 h-5" />
+              Save Profile &amp; Update Goals
+            </button>
+          </div>
+          
         </form>
       </div>
     </div>

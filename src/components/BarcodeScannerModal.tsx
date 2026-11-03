@@ -21,7 +21,10 @@ export const BarcodeScannerModal: React.FC<NutritionLabelModalProps> = ({
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [parsedData, setParsedData] = useState<any | null>(null);
-  const [servings, setServings] = useState<number>(1);
+  
+  // NEW: String state for input to allow complete deletion, and a unit toggle
+  const [inputValue, setInputValue] = useState<string>('1');
+  const [inputUnit, setInputUnit] = useState<'servings' | 'grams'>('servings');
 
   useEffect(() => {
     setSelectedMeal(defaultMealType);
@@ -102,7 +105,8 @@ export const BarcodeScannerModal: React.FC<NutritionLabelModalProps> = ({
       const data = JSON.parse(responseText);
       
       setParsedData(data);
-      setServings(1);
+      setInputValue('1');
+      setInputUnit('servings');
       
     } catch (err: any) {
       if (err.message && !err.message.includes('User cancelled')) {
@@ -116,20 +120,25 @@ export const BarcodeScannerModal: React.FC<NutritionLabelModalProps> = ({
   const handleConfirmLog = () => {
     if (!parsedData) return;
 
+    const amount = parseFloat(inputValue) || 0;
+    const finalServings = inputUnit === 'grams' 
+      ? amount / (parsedData.servingWeightGrams || 100) 
+      : amount;
+
     const newFoodItem: FoodItem = {
       id: `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       name: parsedData.foodName || 'Scanned Food Label',
       brand: parsedData.brand || undefined,
-      servingSize: `${servings} x ${parsedData.servingSize || 'serving'}`,
-      servingWeightGrams: Math.round((parsedData.servingWeightGrams || 100) * servings),
-      servings: servings,
-      calories: Math.round(parsedData.calories * servings),
-      protein: Math.round(parsedData.protein * servings * 10) / 10,
-      carbs: Math.round(parsedData.carbs * servings * 10) / 10,
-      fat: Math.round(parsedData.fat * servings * 10) / 10,
-      fiber: Math.round((parsedData.fiber || 0) * servings * 10) / 10,
-      sugar: Math.round((parsedData.sugar || 0) * servings * 10) / 10,
-      sodiumMg: Math.round((parsedData.sodiumMg || 0) * servings),
+      servingSize: `${Math.round(finalServings * 100) / 100} x ${parsedData.servingSize || 'serving'}`,
+      servingWeightGrams: Math.round((parsedData.servingWeightGrams || 100) * finalServings),
+      servings: finalServings,
+      calories: Math.round(parsedData.calories * finalServings),
+      protein: Math.round(parsedData.protein * finalServings * 10) / 10,
+      carbs: Math.round(parsedData.carbs * finalServings * 10) / 10,
+      fat: Math.round(parsedData.fat * finalServings * 10) / 10,
+      fiber: Math.round((parsedData.fiber || 0) * finalServings * 10) / 10,
+      sugar: Math.round((parsedData.sugar || 0) * finalServings * 10) / 10,
+      sodiumMg: Math.round((parsedData.sodiumMg || 0) * finalServings),
       source: 'ai',
       confidence: 'high',
       loggedAt: new Date().toISOString(),
@@ -144,11 +153,18 @@ export const BarcodeScannerModal: React.FC<NutritionLabelModalProps> = ({
   const handleReset = () => {
     setParsedData(null);
     setError(null);
-    setServings(1);
+    setInputValue('1');
+    setInputUnit('servings');
     setLoading(false);
   };
 
   if (!isOpen) return null;
+
+  // Calculate live preview macros based on input
+  const numericValue = parseFloat(inputValue) || 0;
+  const computedServings = parsedData 
+    ? (inputUnit === 'grams' ? numericValue / (parsedData.servingWeightGrams || 100) : numericValue)
+    : 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md overflow-y-auto">
@@ -250,22 +266,40 @@ export const BarcodeScannerModal: React.FC<NutritionLabelModalProps> = ({
               </div>
 
               {/* Serving Size Adjuster */}
-              <div className="p-3 bg-slate-900 rounded-xl border border-slate-800 flex items-center justify-between">
+              <div className="p-3 bg-slate-900 rounded-xl border border-slate-800 space-y-2.5">
                 <div>
-                  <span className="text-xs font-semibold text-slate-300 block">How many servings did you eat?</span>
-                  <span className="text-xs text-slate-500">Base serving: {parsedData.servingSize}</span>
+                  <span className="text-xs font-semibold text-slate-300 block">Amount Consumed</span>
+                  <span className="text-xs text-slate-500">
+                    Base serving: {parsedData.servingSize} ({parsedData.servingWeightGrams || 100}g)
+                  </span>
                 </div>
                 <div className="flex items-center gap-2">
                   <input
                     type="number"
-                    step="0.25"
-                    min="0.25"
-                    max="20"
-                    value={servings}
-                    onChange={(e) => setServings(Math.max(0.25, parseFloat(e.target.value) || 1))}
-                    className="w-16 bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-center font-mono text-sm text-slate-100 focus:outline-none focus:border-emerald-500"
+                    step="0.1"
+                    min="0"
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-center font-mono text-base text-slate-100 focus:outline-none focus:border-emerald-500"
+                    placeholder="0"
                   />
-                  <span className="text-xs text-slate-400">servings</span>
+                  <select
+                    value={inputUnit}
+                    onChange={(e) => {
+                      const currentVal = parseFloat(inputValue) || 0;
+                      const weightGrams = parsedData.servingWeightGrams || 100;
+                      if (e.target.value === 'grams' && inputUnit === 'servings') {
+                        setInputValue(String(Math.round(currentVal * weightGrams)));
+                      } else if (e.target.value === 'servings' && inputUnit === 'grams') {
+                        setInputValue(String(+(currentVal / weightGrams).toFixed(2)));
+                      }
+                      setInputUnit(e.target.value as 'servings' | 'grams');
+                    }}
+                    className="bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-sm text-slate-100 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                  >
+                    <option value="servings">Servings</option>
+                    <option value="grams">Grams (g)</option>
+                  </select>
                 </div>
               </div>
 
@@ -274,25 +308,25 @@ export const BarcodeScannerModal: React.FC<NutritionLabelModalProps> = ({
                 <div className="p-2.5 bg-slate-900 rounded-xl border border-slate-800">
                   <span className="text-[11px] text-slate-400 block">Calories</span>
                   <span className="text-base font-bold font-mono text-emerald-400">
-                    {Math.round(parsedData.calories * servings)}
+                    {Math.round(parsedData.calories * computedServings)}
                   </span>
                 </div>
                 <div className="p-2.5 bg-slate-900 rounded-xl border border-slate-800">
                   <span className="text-[11px] text-slate-400 block">Protein</span>
                   <span className="text-base font-bold font-mono text-cyan-400">
-                    {Math.round(parsedData.protein * servings * 10) / 10}g
+                    {Math.round(parsedData.protein * computedServings * 10) / 10}g
                   </span>
                 </div>
                 <div className="p-2.5 bg-slate-900 rounded-xl border border-slate-800">
                   <span className="text-[11px] text-slate-400 block">Carbs</span>
                   <span className="text-base font-bold font-mono text-amber-400">
-                    {Math.round(parsedData.carbs * servings * 10) / 10}g
+                    {Math.round(parsedData.carbs * computedServings * 10) / 10}g
                   </span>
                 </div>
                 <div className="p-2.5 bg-slate-900 rounded-xl border border-slate-800">
                   <span className="text-[11px] text-slate-400 block">Fat</span>
                   <span className="text-base font-bold font-mono text-rose-400">
-                    {Math.round(parsedData.fat * servings * 10) / 10}g
+                    {Math.round(parsedData.fat * computedServings * 10) / 10}g
                   </span>
                 </div>
               </div>
@@ -303,7 +337,7 @@ export const BarcodeScannerModal: React.FC<NutritionLabelModalProps> = ({
               >
                 <CheckCircle className="w-5 h-5" />
                 Add to {selectedMeal.charAt(0).toUpperCase() + selectedMeal.slice(1)} (
-                {Math.round(parsedData.calories * servings)} kcal)
+                {Math.round(parsedData.calories * computedServings)} kcal)
               </button>
             </div>
           )}

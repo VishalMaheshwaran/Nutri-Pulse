@@ -1,20 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Bookmark, X, Search, Plus, Trash2 } from 'lucide-react';
+import { SavedFood, MealType } from '../types/nutrition';
 
-// Make sure your MealType and SavedFood interfaces match App.tsx
-export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
-
-export interface SavedFood {
-  id: string;
-  name: string;
-  calories: number;
-  protein: number;
-  carbs: number;
-  fat: number;
-  // include any other fields your saved food item has (e.g. servingSize)
-}
-
-// 1. Updated interface to match all the props passed from App.tsx
 export interface SavedFoodsModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -22,7 +9,7 @@ export interface SavedFoodsModalProps {
   savedFoods: SavedFood[];
   onLogSavedFood: (savedFood: SavedFood, targetMeal: MealType) => void;
   onDeleteSavedFood?: (id: string) => void;
-  onAddCustomSavedFood?: (foodData: Omit<SavedFood, 'id'>) => void;
+  onAddCustomSavedFood: (foodData: Omit<SavedFood, "id" | "createdAt">) => void;
 }
 
 export function SavedFoodsModal({
@@ -34,7 +21,6 @@ export function SavedFoodsModal({
   onDeleteSavedFood,
   onAddCustomSavedFood,
 }: SavedFoodsModalProps) {
-  // 2. Set default meal to defaultMeal when opening modal
   const [selectedMeal, setSelectedMeal] = useState<MealType>(defaultMeal);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -72,7 +58,7 @@ export function SavedFoodsModal({
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-100 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+            className="p-1.5 text-slate-400 hover:text-slate-100 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
@@ -92,7 +78,7 @@ export function SavedFoodsModal({
                   key={meal}
                   type="button"
                   onClick={() => setSelectedMeal(meal)}
-                  className={`py-2 px-2 text-xs font-semibold capitalize rounded-xl border transition-all cursor-pointer ${
+                  className={`py-2 px-1 sm:px-2 text-[10px] sm:text-xs font-semibold capitalize rounded-xl border transition-all cursor-pointer ${
                     selectedMeal === meal
                       ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
                       : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200'
@@ -126,27 +112,27 @@ export function SavedFoodsModal({
               filteredFoods.map((food) => (
                 <div
                   key={food.id}
-                  className="flex items-center justify-between p-3 sm:p-4 bg-slate-950/50 border border-slate-800 rounded-xl hover:border-slate-700 transition-colors"
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 p-3 sm:p-4 bg-slate-950/50 border border-slate-800 rounded-xl hover:border-slate-700 transition-colors"
                 >
                   <div>
                     <h4 className="text-sm font-medium text-slate-200">
                       {food.name}
                     </h4>
-                    <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-2">
-                      <span>{food.calories} kcal</span>
-                      <span>•</span>
+                    <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 flex flex-wrap items-center gap-2">
+                      <span className="font-semibold text-slate-400">{food.calories} kcal</span>
+                      <span className="hidden sm:inline">•</span>
                       <span>P: {food.protein}g</span>
                       <span>C: {food.carbs}g</span>
                       <span>F: {food.fat}g</span>
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 w-full sm:w-auto mt-1 sm:mt-0">
                     {onDeleteSavedFood && (
                       <button
                         type="button"
                         onClick={() => onDeleteSavedFood(food.id)}
-                        className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
+                        className="p-2 sm:p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer shrink-0"
                         title="Delete saved food"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -160,10 +146,10 @@ export function SavedFoodsModal({
                         onLogSavedFood(food, selectedMeal);
                         onClose();
                       }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-amber-500 hover:text-slate-950 text-slate-300 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                      className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 bg-slate-800 hover:bg-amber-500 hover:text-slate-950 text-slate-300 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
                     >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span className="capitalize">Log to {selectedMeal}</span>
+                      <Plus className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate capitalize">Log to {selectedMeal}</span>
                     </button>
                   </div>
                 </div>

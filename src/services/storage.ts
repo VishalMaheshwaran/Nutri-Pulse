@@ -179,14 +179,17 @@ export function saveStoredLogs(logs: Record<string, DailyLog>): void {
 export function calculateTotals(items: FoodItem[]): MacroTotals {
   return items.reduce(
     (acc, item) => {
+      // Restore the servings multiplier!
+      const mult = item.servings || 1; 
+      
       return {
-        calories: acc.calories + Math.round(item.calories),
-        protein: Math.round((acc.protein + item.protein) * 10) / 10,
-        carbs: Math.round((acc.carbs + item.carbs) * 10) / 10,
-        fat: Math.round((acc.fat + item.fat) * 10) / 10,
-        fiber: Math.round((acc.fiber + item.fiber) * 10) / 10,
-        sugar: Math.round((acc.sugar + (item.sugar || 0)) * 10) / 10,
-        sodiumMg: acc.sodiumMg + Math.round(item.sodiumMg || 0),
+        calories: acc.calories + Math.round(item.calories * mult),
+        protein: Math.round((acc.protein + item.protein * mult) * 10) / 10,
+        carbs: Math.round((acc.carbs + item.carbs * mult) * 10) / 10,
+        fat: Math.round((acc.fat + item.fat * mult) * 10) / 10,
+        fiber: Math.round((acc.fiber + (item.fiber || 0) * mult) * 10) / 10,
+        sugar: Math.round((acc.sugar + (item.sugar || 0) * mult) * 10) / 10,
+        sodiumMg: acc.sodiumMg + Math.round((item.sodiumMg || 0) * mult),
       };
     },
     { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0, sodiumMg: 0 }

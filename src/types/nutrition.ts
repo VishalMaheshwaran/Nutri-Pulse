@@ -51,6 +51,8 @@ export interface DailyLog {
   waterIntakeMl: number;
   workouts?: WorkoutItem[]; // <-- ADD THIS LINE
   notes?: string;
+  targetCalories?: number;
+  targetProtein?: number;
 }
 
 export interface MacroTotals {

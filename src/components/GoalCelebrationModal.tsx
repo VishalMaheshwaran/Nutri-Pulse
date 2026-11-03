@@ -252,7 +252,7 @@ export const GoalCelebrationModal: React.FC<GoalCelebrationModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="relative w-full max-w-md bg-gradient-to-b from-slate-900 to-slate-950 border border-amber-500/40 rounded-3xl p-6 shadow-2xl shadow-amber-500/10 text-center space-y-5 overflow-hidden">
+      <div className="relative w-full max-w-md bg-linear-to-b from-slate-900 to-slate-950 border border-amber-500/40 rounded-3xl p-6 shadow-2xl shadow-amber-500/10 text-center space-y-5 overflow-hidden">
         <button
           onClick={() => {
             setIsOpen(false);
@@ -264,7 +264,7 @@ export const GoalCelebrationModal: React.FC<GoalCelebrationModalProps> = ({
         </button>
 
         <div className="space-y-2 pt-2">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-amber-500 to-orange-400 text-slate-950 flex items-center justify-center mx-auto shadow-lg shadow-amber-500/30">
+          <div className="w-16 h-16 rounded-2xl bg-linear-to-tr from-amber-500 to-orange-400 text-slate-950 flex items-center justify-center mx-auto shadow-lg shadow-amber-500/30">
             <Trophy className="w-9 h-9 stroke-[2.2]" />
           </div>
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-500/15 border border-orange-500/30 text-orange-300 text-xs font-mono font-bold">
@@ -321,7 +321,7 @@ export const GoalCelebrationModal: React.FC<GoalCelebrationModalProps> = ({
             setIsOpen(false);
             if (onCloseTest) onCloseTest();
           }}
-          className="w-full py-3 bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-extrabold text-sm rounded-xl shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 cursor-pointer"
+          className="w-full py-3 bg-linear-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-extrabold text-sm rounded-xl shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 cursor-pointer"
         >
           <CheckCircle2 className="w-4 h-4" /> Keep the Streak Alive!
         </button>
