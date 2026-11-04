@@ -1,16 +1,7 @@
 // src/components/MobileBottomNav.tsx
-import React, { useState } from 'react';
-import {
-  LayoutDashboard,
-  BarChart3,
-  Plus,
-  Bookmark,
-  Sliders,
-  Camera,
-  Sparkles,
-  X,
-} from 'lucide-react';
-import { hasConnectedApiKey } from '../utils/geminiStorage';
+import React from 'react';
+import { Home, BarChart2, Sparkles, Bookmark, Target } from 'lucide-react';
+import { useTheme } from '../hooks/useTheme';
 
 interface MobileBottomNavProps {
   activeView: 'dashboard' | 'statistics';
@@ -24,168 +15,65 @@ interface MobileBottomNavProps {
 export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   activeView,
   setActiveView,
-  onOpenBarcode,
   onOpenGemini,
   onOpenSavedFoods,
   onOpenProfile,
 }) => {
-  const [isQuickMenuOpen, setIsQuickMenuOpen] = useState(false);
-  const apiReady = hasConnectedApiKey();
+  const { t } = useTheme();
 
   return (
-    <>
-      {/* Centered Quick Action Modal when Center '+' is tapped on Mobile */}
-      {isQuickMenuOpen && (
-        <div
-          className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 md:hidden animate-in fade-in duration-200"
-          onClick={() => setIsQuickMenuOpen(false)}
-        >
-          <div
-            className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-5 shadow-2xl animate-in zoom-in-95 duration-200"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <div>
-                <span className="text-base font-extrabold text-slate-100 block">Log Nutrition</span>
-                <span className="text-[11px] text-slate-400">Choose how you want to add your food</span>
-              </div>
-              <button
-                onClick={() => setIsQuickMenuOpen(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-100 bg-slate-800/70 rounded-full cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-3 gap-3">
-              {/* Option 1: Camera Scan */}
-              <button
-                disabled={!apiReady}
-                title={!apiReady ? 'Connect Gemini API Key in Settings to unlock' : 'Scan Label'}
-                onClick={() => {
-                  setIsQuickMenuOpen(false);
-                  onOpenBarcode();
-                }}
-                className={`p-4 rounded-2xl border flex flex-col items-center justify-center gap-2 text-center transition ${
-                  apiReady
-                    ? 'bg-slate-950 border-emerald-500/30 hover:border-emerald-500/60 active:scale-95 cursor-pointer'
-                    : 'bg-slate-900 border-slate-800 opacity-40 cursor-not-allowed'
-                }`}
-              >
-                <div
-                  className={`w-11 h-11 rounded-2xl flex items-center justify-center ${
-                    apiReady ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-500'
-                  }`}
-                >
-                  <Camera className="w-5 h-5" />
-                </div>
-                <span
-                  className={`text-xs font-bold ${
-                    apiReady ? 'text-slate-200' : 'text-slate-500'
-                  }`}
-                >
-                  Scan Label
-                </span>
-              </button>
-
-              {/* Option 2: AI Prompt */}
-              <button
-                disabled={!apiReady}
-                title={!apiReady ? 'Connect Gemini API Key in Settings to unlock' : 'AI Scan'}
-                onClick={() => {
-                  setIsQuickMenuOpen(false);
-                  onOpenGemini();
-                }}
-                className={`p-4 rounded-2xl border flex flex-col items-center justify-center gap-2 text-center transition ${
-                  apiReady
-                    ? 'bg-slate-950 border-indigo-500/30 hover:border-indigo-500/60 active:scale-95 cursor-pointer'
-                    : 'bg-slate-900 border-slate-800 opacity-40 cursor-not-allowed'
-                }`}
-              >
-                <div
-                  className={`w-11 h-11 rounded-2xl flex items-center justify-center ${
-                    apiReady ? 'bg-indigo-500/20 text-indigo-400' : 'bg-slate-800 text-slate-500'
-                  }`}
-                >
-                  <Sparkles className="w-5 h-5" />
-                </div>
-                <span
-                  className={`text-xs font-bold ${
-                    apiReady ? 'text-slate-200' : 'text-slate-500'
-                  }`}
-                >
-                  AI Prompt
-                </span>
-              </button>
-
-              {/* Option 3: Saved Foods */}
-              <button
-                onClick={() => {
-                  setIsQuickMenuOpen(false);
-                  onOpenSavedFoods();
-                }}
-                className="p-4 rounded-2xl bg-slate-950 border border-amber-500/30 hover:border-amber-500/60 flex flex-col items-center justify-center gap-2 text-center transition active:scale-95 cursor-pointer"
-              >
-                <div className="w-11 h-11 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
-                  <Bookmark className="w-5 h-5" />
-                </div>
-                <span className="text-xs font-bold text-slate-200">Saved</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Fixed Bottom Mobile Navigation Bar */}
-      <nav
-        className="fixed bottom-0 left-0 right-0 z-40 bg-slate-950/95 backdrop-blur-lg border-t border-slate-800 md:hidden px-3 py-2 flex items-center justify-around"
-        style={{ paddingBottom: 'calc(0.5rem + env(safe-area-inset-bottom, 0px))' }}
-      >
+    <nav className={`fixed bottom-0 left-0 right-0 z-50 ${t.innerBg} bg-opacity-95 backdrop-blur-xl border-t ${t.innerBorder} pb-safe transition-colors duration-300`}>
+      <div className="max-w-md mx-auto px-4 h-16 flex items-center justify-between">
+        
+        {/* 1. HOME */}
         <button
           onClick={() => setActiveView('dashboard')}
-          className={`flex flex-col items-center gap-1 py-1 px-3 transition-colors ${
-            activeView === 'dashboard' ? 'text-emerald-400 font-bold' : 'text-slate-400 hover:text-slate-200'
+          className={`flex flex-col items-center justify-center w-12 gap-1 transition-all ${
+            activeView === 'dashboard' ? `${t.accentCyan} scale-110` : `${t.textSecondary} hover:${t.textPrimary}`
           }`}
         >
-          <LayoutDashboard className="w-5 h-5" />
-          <span className="text-[10px]">Dashboard</span>
+          <Home className="w-5 h-5" />
+          <span className="text-[9px] font-semibold tracking-wide">Home</span>
         </button>
 
+        {/* 2. STATS (Moved to the left) */}
         <button
           onClick={() => setActiveView('statistics')}
-          className={`flex flex-col items-center gap-1 py-1 px-3 transition-colors ${
-            activeView === 'statistics' ? 'text-emerald-400 font-bold' : 'text-slate-400 hover:text-slate-200'
+          className={`flex flex-col items-center justify-center w-12 gap-1 transition-all ${
+            activeView === 'statistics' ? `${t.accentCyan} scale-110` : `${t.textSecondary} hover:${t.textPrimary}`
           }`}
         >
-          <BarChart3 className="w-5 h-5" />
-          <span className="text-[10px]">Statistics</span>
+          <BarChart2 className="w-5 h-5" />
+          <span className="text-[9px] font-semibold tracking-wide">Stats</span>
         </button>
 
-        {/* Center Floating Plus Button */}
+        {/* 3. GENERATE (Center) */}
         <button
-          onClick={() => setIsQuickMenuOpen(true)}
-          className="-mt-5 w-12 h-12 rounded-full bg-gradient-to-tr from-emerald-500 to-cyan-400 text-slate-950 flex items-center justify-center shadow-lg shadow-emerald-500/30 active:scale-95 transition-transform cursor-pointer"
-          aria-label="Quick Log Food"
+          onClick={onOpenGemini}
+          className={`relative -top-5 flex items-center justify-center w-14 h-14 rounded-full ${t.activeBtnBg} ${t.activeBtnText} shadow-lg hover:scale-105 transition-all duration-300 shrink-0`}
         >
-          <Plus className="w-6 h-6 stroke-[2.5]" />
+          <Sparkles className="w-6 h-6" />
         </button>
 
+        {/* 4. SAVED */}
         <button
           onClick={onOpenSavedFoods}
-          className="flex flex-col items-center gap-1 py-1 px-3 text-slate-400 hover:text-slate-200 transition-colors"
+          className={`flex flex-col items-center justify-center w-12 gap-1 transition-all ${t.textSecondary} hover:${t.accentCyan}`}
         >
           <Bookmark className="w-5 h-5" />
-          <span className="text-[10px]">Saved</span>
+          <span className="text-[9px] font-semibold tracking-wide">Saved</span>
         </button>
 
+        {/* 5. TARGET / GOALS (Moved to the far right) */}
         <button
           onClick={onOpenProfile}
-          className="flex flex-col items-center gap-1 py-1 px-3 text-slate-400 hover:text-slate-200 transition-colors"
+          className={`flex flex-col items-center justify-center w-12 gap-1 transition-all ${t.textSecondary} hover:${t.accentCyan}`}
         >
-          <Sliders className="w-5 h-5" />
-          <span className="text-[10px]">Targets</span>
+          <Target className="w-5 h-5" />
+          <span className="text-[9px] font-semibold tracking-wide">Goals</span>
         </button>
-      </nav>
-    </>
+        
+      </div>
+    </nav>
   );
 };

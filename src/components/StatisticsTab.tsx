@@ -4,6 +4,7 @@ import { Target, Flame, Trophy, Zap, Calendar, Activity, PieChart, Award, Trendi
 import { DailyLog, UserProfile } from '../types/nutrition';
 import { calculateTotals } from '../services/storage';
 import { WeeklyReportCard } from './WeeklyReportCard';
+import { MonthlyReportCard } from './MonthlyReportCard';
 import { useTheme } from '../hooks/useTheme';
 
 interface StatisticsTabProps {
@@ -26,7 +27,9 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
   
   const [isHeatmapExpanded, setIsHeatmapExpanded] = useState(false);
   const [isProteinExpanded, setIsProteinExpanded] = useState(false);
+  
   const [isWeeklyModalOpen, setIsWeeklyModalOpen] = useState(false);
+  const [isMonthlyModalOpen, setIsMonthlyModalOpen] = useState(false);
   
   const daysCount = timeRange === '7d' ? 7 : timeRange === '14d' ? 14 : 30;
 
@@ -168,69 +171,99 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
   return (
     <div className="space-y-5 sm:space-y-8 w-full transition-colors duration-300">
       
-      {/* SIDE-BY-SIDE CARDS WITH BLINKING REPORT ICONS */}
-      <div className="grid grid-cols-2 gap-3 sm:gap-5 w-full items-stretch">
+      {/* 3-COLUMN REPORT GRID */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 w-full items-stretch">
         
-        {/* Daily Report Card - Left Side */}
         {onOpenDailyReport && (
-          <div className={`p-4 sm:p-6 ${t.cardBg} border ${t.cardBorder} rounded-2xl sm:rounded-3xl ${t.shadow} flex flex-col justify-between gap-4 transition-colors h-full w-full relative overflow-hidden group`}>
-            <div className={`absolute top-0 right-0 -mr-16 -mt-16 w-48 h-48 ${t.bgEmerald} opacity-5 rounded-full blur-3xl pointer-events-none`} />
+          <div className={`p-4 sm:p-5 ${t.cardBg} border ${t.cardBorder} rounded-2xl sm:rounded-3xl ${t.shadow} flex flex-col justify-between gap-4 transition-colors h-full w-full relative overflow-hidden group`}>
+            <div className={`absolute top-0 right-0 -mr-16 -mt-16 w-36 h-36 ${t.bgEmerald} opacity-5 rounded-full blur-2xl pointer-events-none`} />
             
-            <div className="flex flex-col sm:flex-row items-center sm:items-start gap-3 sm:gap-4 z-10 text-center sm:text-left">
-              <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-2xl ${t.innerBg} border ${t.innerBorder} flex items-center justify-center ${t.accentEmerald} shrink-0`}>
-                <Sparkles className="w-5 h-5 sm:w-6 sm:h-6 " />
+            <div className="flex flex-col sm:flex-row items-center sm:items-start gap-2.5 sm:gap-3.5 z-10 text-center sm:text-left">
+              <div className={`w-10 h-10 rounded-xl ${t.innerBg} border ${t.innerBorder} flex items-center justify-center ${t.accentEmerald} shrink-0`}>
+                <Sparkles className="w-5 h-5" />
               </div>
               <div className="min-w-0">
-                <h2 className={`text-xs sm:text-base font-bold ${t.textPrimary} truncate`}>Daily AI Report</h2>
-                <p className={`text-[10px] sm:text-xs ${t.textSecondary} mt-0.5 line-clamp-2`}>Review yesterday&apos;s breakdown</p>
+                <h2 className={`text-xs sm:text-sm font-bold ${t.textPrimary} truncate`}>Daily AI Report</h2>
+                <p className={`text-[10px] sm:text-xs ${t.textSecondary} mt-0.5 line-clamp-1`}>Yesterday&apos;s insight</p>
               </div>
             </div>
 
             <button
               type="button"
               onClick={onOpenDailyReport}
-              className={`w-full py-2.5 sm:py-3.5 px-3 ${t.activeBtnBg} ${t.activeBtnText} hover:opacity-90 font-bold text-xs sm:text-sm rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer shrink-0 z-10 mt-auto`}
+              className={`w-full py-2.5 px-3 ${t.activeBtnBg} ${t.activeBtnText} hover:opacity-90 font-bold text-xs rounded-xl transition-all shadow-lg flex items-center justify-center gap-1.5 cursor-pointer shrink-0 z-10 mt-auto`}
             >
               <span className="truncate">Open Report</span>
-              <ArrowRight className="w-4 h-4 shrink-0" />
+              <ArrowRight className="w-3.5 h-3.5 shrink-0" />
             </button>
           </div>
         )}
 
-        {/* Weekly Report Card - Right Side */}
-        <div className={`p-4 sm:p-6 ${t.cardBg} border ${t.cardBorder} rounded-2xl sm:rounded-3xl ${t.shadow} flex flex-col justify-between gap-4 transition-colors h-full w-full relative overflow-hidden group`}>
-          <div className={`absolute top-0 right-0 -mr-16 -mt-16 w-48 h-48 ${t.bgEmerald} opacity-5 rounded-full blur-3xl pointer-events-none`} />
+        <div className={`p-4 sm:p-5 ${t.cardBg} border ${t.cardBorder} rounded-2xl sm:rounded-3xl ${t.shadow} flex flex-col justify-between gap-4 transition-colors h-full w-full relative overflow-hidden group`}>
+          <div className={`absolute top-0 right-0 -mr-16 -mt-16 w-36 h-36 ${t.bgEmerald} opacity-5 rounded-full blur-2xl pointer-events-none`} />
           
-          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-3 sm:gap-4 z-10 text-center sm:text-left">
-            <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-2xl ${t.innerBg} border ${t.innerBorder} flex items-center justify-center ${t.accentEmerald} shrink-0`}>
-              <Award className="w-5 h-5 sm:w-6 sm:h-6 " />
+          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-2.5 sm:gap-3.5 z-10 text-center sm:text-left">
+            <div className={`w-10 h-10 rounded-xl ${t.innerBg} border ${t.innerBorder} flex items-center justify-center ${t.accentEmerald} shrink-0`}>
+              <Award className="w-5 h-5" />
             </div>
             <div className="min-w-0">
-              <h2 className={`text-xs sm:text-base font-bold ${t.textPrimary} truncate`}>Weekly AI Report</h2>
-              <p className={`text-[10px] sm:text-xs ${t.textSecondary} mt-0.5 line-clamp-2`}>Monday – Sunday trends</p>
+              <h2 className={`text-xs sm:text-sm font-bold ${t.textPrimary} truncate`}>Weekly AI Report</h2>
+              <p className={`text-[10px] sm:text-xs ${t.textSecondary} mt-0.5 line-clamp-1`}>Mon – Sun trends</p>
             </div>
           </div>
 
           <button
             type="button"
             onClick={() => setIsWeeklyModalOpen(true)}
-            className={`w-full py-2.5 sm:py-3.5 px-3 ${t.activeBtnBg} ${t.activeBtnText} hover:opacity-90 font-bold text-xs sm:text-sm rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer shrink-0 z-10 mt-auto`}
+            className={`w-full py-2.5 px-3 ${t.activeBtnBg} ${t.activeBtnText} hover:opacity-90 font-bold text-xs rounded-xl transition-all shadow-lg flex items-center justify-center gap-1.5 cursor-pointer shrink-0 z-10 mt-auto`}
           >
             <span className="truncate">Open Weekly</span>
-            <ArrowRight className="w-4 h-4 shrink-0" />
+            <ArrowRight className="w-3.5 h-3.5 shrink-0" />
+          </button>
+        </div>
+
+        <div className={`col-span-2 sm:col-span-1 p-4 sm:p-5 ${t.cardBg} border ${t.cardBorder} rounded-2xl sm:rounded-3xl ${t.shadow} flex flex-col justify-between gap-4 transition-colors h-full w-full relative overflow-hidden group`}>
+          <div className={`absolute top-0 right-0 -mr-16 -mt-16 w-36 h-36 ${t.bgEmerald} opacity-5 rounded-full blur-2xl pointer-events-none`} />
+          
+          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-2.5 sm:gap-3.5 z-10 text-center sm:text-left">
+            <div className={`w-10 h-10 rounded-xl ${t.innerBg} border ${t.innerBorder} flex items-center justify-center ${t.accentEmerald} shrink-0`}>
+              <Calendar className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <h2 className={`text-xs sm:text-sm font-bold ${t.textPrimary} truncate`}>Monthly Audit</h2>
+              <p className={`text-[10px] sm:text-xs ${t.textSecondary} mt-0.5 line-clamp-1`}>Full month review</p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setIsMonthlyModalOpen(true)}
+            className={`w-full py-2.5 px-3 ${t.activeBtnBg} ${t.activeBtnText} hover:opacity-90 font-bold text-xs rounded-xl transition-all shadow-lg flex items-center justify-center gap-1.5 cursor-pointer shrink-0 z-10 mt-auto`}
+          >
+            <span className="truncate">Open Monthly</span>
+            <ArrowRight className="w-3.5 h-3.5 shrink-0" />
           </button>
         </div>
 
       </div>
 
-      {/* Render the Weekly Modal */}
+      {/* Render Report Modals with currentDate passed down */}
       <WeeklyReportCard 
         logs={logs} 
         profile={profile} 
+        currentDate={currentDate}
         isOpen={isWeeklyModalOpen} 
         onClose={() => setIsWeeklyModalOpen(false)} 
       />
+      <MonthlyReportCard 
+        logs={logs} 
+        profile={profile} 
+        currentDate={currentDate}
+        isOpen={isMonthlyModalOpen} 
+        onClose={() => setIsMonthlyModalOpen(false)} 
+      />
 
+      {/* Analytics Header Bar */}
       <div className={`flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 p-4 sm:p-5 ${t.cardBg} border ${t.cardBorder} rounded-2xl ${t.shadow} w-full transition-colors`}>
         <div className="flex items-center gap-3">
           <div className={`w-10 h-10 rounded-xl ${t.innerBg} border ${t.innerBorder} flex items-center justify-center ${t.accentCyan} shrink-0 transition-colors`}>
@@ -267,6 +300,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
         </div>
       </div>
 
+      {/* 4 Summary Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 w-full">
         <div className={`p-4 sm:p-5 ${t.cardBg} border ${t.cardBorder} rounded-2xl space-y-2.5 sm:space-y-3 ${t.shadow} transition-colors`}>
           <div className={`flex items-center justify-between text-xs ${t.textSecondary}`}>
@@ -377,6 +411,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
         </div>
       </div>
 
+      {/* Daily Habit Heatmap - Clean borders */}
       <div className={`p-4 sm:p-6 ${t.cardBg} border ${t.cardBorder} rounded-2xl ${t.shadow} space-y-4 w-full relative transition-colors`}>
         <div className={`flex flex-col md:flex-row md:items-center justify-between gap-3 pb-1 border-b ${t.innerBorder} mb-2 transition-colors`}>
           <div className="flex items-center justify-between w-full md:w-auto gap-4">
@@ -405,7 +440,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
               <span>Calories</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <div className={`w-2.5 h-2.5 rounded ${t.heatmapLogged} border ${t.innerBorder} shrink-0`} />
+              <div className={`w-2.5 h-2.5 rounded ${t.heatmapLogged} shrink-0`} />
               <span>Logged</span>
             </div>
           </div>
@@ -424,10 +459,10 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
               <button
                 key={day.date}
                 onClick={() => onSelectDate(day.date)}
-                className={`p-2.5 sm:p-3 rounded-xl border text-left transition-all cursor-pointer relative overflow-hidden group ${
+                className={`p-2.5 sm:p-3 rounded-xl text-left transition-all cursor-pointer relative overflow-hidden group ${
                   isSelected
-                    ? `shadow-md ring-1 ${t.heatmapCellActive}`
-                    : `${t.cardBg} border ${t.innerBorder} ${t.heatmapCellHover}`
+                    ? `border border-emerald-500/60 shadow-md ${t.innerBg}`
+                    : `${t.innerBg} border border-slate-800/40 hover:border-slate-700/60`
                 }`}
               >
                 <div
@@ -452,7 +487,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
                         <Activity className={`w-3 h-3 ${t.accentOrange}`} />
                       </span>
                     )}
-                    {day.isPerfect && <Award className={`w-3.5 h-3.5 ${t.accentAmber} animate-badge-blink`} />}
+                    {day.isPerfect && <Award className={`w-3.5 h-3.5 ${t.accentAmber}`} />}
                   </div>
                 </div>
 
@@ -484,10 +519,10 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           {canExpand && (
             <button
               onClick={() => setIsHeatmapExpanded(!isHeatmapExpanded)}
-              className={`rounded-xl border ${t.innerBorder} ${t.innerBg} ${t.btnHover} ${t.textSecondary} hover:${t.textPrimary} transition-all flex flex-col items-center justify-center cursor-pointer group 
+              className={`rounded-xl border border-slate-800/40 ${t.innerBg} ${t.btnHover} ${t.textSecondary} hover:${t.textPrimary} transition-all flex flex-col items-center justify-center cursor-pointer group 
                 ${isHeatmapExpanded 
                   ? 'col-span-2 sm:col-span-4 md:col-span-7 h-12 flex-row gap-2 py-0 min-h-0' 
-                  : 'col-span-1 p-2.5 sm:p-3 min-h-[96px]'
+                  : 'col-span-1 p-2.5 sm:p-3 min-h-24'
                 }`}
               title={isHeatmapExpanded ? "Show Less" : "Expand Heatmap"}
             >
@@ -497,6 +532,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
         </div>
       </div>
 
+      {/* Protein Intake Trend & Macro Split */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6 w-full">
         <div className={`lg:col-span-7 p-4 sm:p-6 ${t.cardBg} border ${t.cardBorder} rounded-2xl ${t.shadow} space-y-4 sm:space-y-5 transition-colors`}>
           <div className={`flex items-center justify-between gap-2 border-b ${t.innerBorder} pb-3 transition-colors`}>
