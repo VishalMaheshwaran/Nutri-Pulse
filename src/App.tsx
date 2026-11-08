@@ -1,6 +1,6 @@
 // src/App.tsx
 import React, { useState, useEffect, useMemo } from 'react';
-import { Sparkles, Trophy, Flame } from 'lucide-react';
+import { Sparkles, Trophy, Flame, Bell } from 'lucide-react';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { DailyLog, FoodItem, MealType, UserProfile, SavedFood, WorkoutItem, SavedWorkout } from './types/nutrition';
 import {
@@ -17,6 +17,7 @@ import {
 } from './services/storage';
 import { TopBar } from './components/TopBar';
 import { MacroRings } from './components/MacroRings';
+import { LiveMacroWidget } from './components/LiveMacroWidget';
 import { MealSection } from './components/MealSection';
 import { WaterTracker } from './components/WaterTracker';
 import { WorkoutTracker } from './components/WorkoutTracker';
@@ -30,6 +31,7 @@ import { OfflineIndicator } from './components/OfflineIndicator';
 import { SavedWorkoutsModal } from './components/SavedWorkoutsModal';
 import { GoalCelebrationModal } from './components/GoalCelebrationModal';
 import { DailyReportModal } from './components/DailyReportModal';
+import { NotificationPreviewModal } from './components/NotificationPreviewModal';
 import { updateLiveTrackerNotification } from './services/notifications';
 import { useTheme } from './hooks/useTheme';
 
@@ -54,6 +56,7 @@ export default function App() {
   const [isSavedFoodsOpen, setIsSavedFoodsOpen] = useState<boolean>(false);
   const [isStreakPreviewOpen, setIsStreakPreviewOpen] = useState<boolean>(false);
   const [isDailyReportOpen, setIsDailyReportOpen] = useState<boolean>(false);
+  const [isNotifPreviewOpen, setIsNotifPreviewOpen] = useState<boolean>(false);
   const [activeMealTarget, setActiveMealTarget] = useState<MealType>('lunch');
   const [activeView, setActiveView] = useState<'dashboard' | 'statistics'>('dashboard');
 
@@ -128,9 +131,20 @@ export default function App() {
       burnedCalories: burnedCalories,
       proteinGrams: totals.protein,
       targetProtein: currentLog.targetProtein ?? profile.targetProtein ?? 150,
+      carbsGrams: totals.carbs,
+      targetCarbs: profile.targetCarbs,
+      fatGrams: totals.fat,
+      targetFat: profile.targetFat,
       waterMl: currentLog.waterIntakeMl || 0,
+      targetWaterMl: profile.waterGoalMl,
+      streakDays: perfectStreak,
+      recentFoods: currentLog.items.slice(0, 4).map((item) => ({
+        name: item.name,
+        calories: Math.round(item.calories * item.servings),
+        mealType: item.mealType,
+      })),
     });
-  }, [totals.calories, totals.protein, burnedCalories, currentLog, profile]);
+  }, [totals, burnedCalories, currentLog, profile, perfectStreak]);
 
   const handleFoodLogged = (newItem: FoodItem) => {
     setLogs((prev) => {
@@ -305,14 +319,26 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 shrink-0">
-                  <Flame className="w-4 h-4 text-amber-400" />
-                  <span className="text-sm sm:text-base font-extrabold font-mono text-amber-400">
-                    {perfectStreak}d
-                  </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsNotifPreviewOpen(true)}
+                    className="py-1.5 px-2.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                    title="Preview Notification Photo Card"
+                  >
+                    <Bell className="w-3.5 h-3.5 text-emerald-400" />
+                    <span className="hidden sm:inline">Notification Card</span>
+                  </button>
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 shrink-0">
+                    <Flame className="w-4 h-4 text-amber-400" />
+                    <span className="text-sm sm:text-base font-extrabold font-mono text-amber-400">
+                      {perfectStreak}d
+                    </span>
+                  </div>
                 </div>
               </div>
 
+              <LiveMacroWidget totals={totals} profile={profile} caloriesBurned={burnedCalories} logs={logs} onTriggerStreakPreview={() => setIsStreakPreviewOpen(true)} onOpenPhotoPreview={() => setIsNotifPreviewOpen(true)} />
               <MacroRings totals={totals} profile={profile} caloriesBurned={burnedCalories} />
 
               <div className="space-y-4 sm:space-y-5 w-full">
@@ -361,6 +387,29 @@ export default function App() {
         <SavedWorkoutsModal isOpen={isSavedWorkoutsOpen} onClose={() => setIsSavedWorkoutsOpen(false)} savedWorkouts={savedWorkouts} onLogSavedWorkout={handleLogSavedWorkout} onDeleteSavedWorkout={handleDeleteSavedWorkout} />
         <GoalCelebrationModal logs={logs} profile={profile} forceOpenTest={isStreakPreviewOpen} onCloseTest={() => setIsStreakPreviewOpen(false)} />
         <DailyReportModal logs={logs} profile={profile} isOpen={isDailyReportOpen} onClose={() => setIsDailyReportOpen(false)} />
+                <NotificationPreviewModal
+          isOpen={isNotifPreviewOpen}
+          onClose={() => setIsNotifPreviewOpen(false)}
+          cardData={{
+            eatenCalories: totals.calories,
+            targetCalories: currentLog.targetCalories ?? profile.targetCalories ?? 2600,
+            burnedCalories: burnedCalories,
+            proteinGrams: totals.protein,
+            targetProtein: currentLog.targetProtein ?? profile.targetProtein ?? 150,
+            carbsGrams: totals.carbs,
+            targetCarbs: profile.targetCarbs,
+            fatGrams: totals.fat,
+            targetFat: profile.targetFat,
+            waterMl: currentLog.waterIntakeMl || 0,
+            targetWaterMl: profile.waterGoalMl,
+            streakDays: perfectStreak,
+            recentFoods: currentLog.items.slice(0, 4).map((item) => ({
+              name: item.name,
+              calories: Math.round(item.calories * item.servings),
+              mealType: item.mealType,
+            })),
+          }}
+        />
         <OfflineIndicator />
 
         <MobileBottomNav
