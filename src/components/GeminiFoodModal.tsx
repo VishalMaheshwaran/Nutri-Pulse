@@ -1,14 +1,16 @@
+// src/components/GeminiFoodModal.tsx
 import React, { useState, useRef, useEffect } from 'react';
-import { Sparkles, Camera, Upload, X, CheckCircle, RefreshCw, AlertCircle, ChevronRight, Layers, Loader2 } from 'lucide-react';
+import { Sparkles, Camera, Upload, X, ChevronRight } from 'lucide-react';
 import { FoodItem, MealType } from '../types/nutrition';
-import { getStoredApiKey, callGeminiWithInfiniteRetry } from '../utils/geminiStorage';
+import { callGeminiWithInfiniteRetry } from '../utils/geminiStorage';
+import { useTasks } from '../context/TaskContext';
 
 interface GeminiFoodModalProps {
   isOpen: boolean;
   onClose: () => void;
   onFoodLogged: (item: FoodItem) => void;
   defaultMealType?: MealType;
-  itemToEdit?: FoodItem; // NEW: Receives the item we want to edit
+  itemToEdit?: FoodItem;
 }
 
 const QUICK_PROMPT_PRESETS = [
@@ -26,29 +28,23 @@ export const GeminiFoodModal: React.FC<GeminiFoodModalProps> = ({
   defaultMealType = 'lunch',
   itemToEdit,
 }) => {
+  const { runTask } = useTasks(); // <-- Bringing in the background manager!
+  
   const [selectedMeal, setSelectedMeal] = useState<MealType>(defaultMealType);
   const [activeTab, setActiveTab] = useState<'text' | 'image'>('text');
   const [textInput, setTextInput] = useState<string>('');
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageMimeType, setImageMimeType] = useState<string>('image/jpeg');
-  const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
-  const [analysisResult, setAnalysisResult] = useState<any | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [servingMult, setServingMult] = useState<number>(1);
   
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Auto-populate the form if we are editing an existing AI item
   useEffect(() => {
     if (isOpen) {
       setSelectedMeal(itemToEdit?.mealType || defaultMealType);
       if (itemToEdit) {
         setActiveTab('text');
-        // Load the prompt if it exists, otherwise fall back to the name
         setTextInput(itemToEdit.originalPrompt || itemToEdit.name || '');
-        setAnalysisResult(null); // Clear previous results to force a re-calc
       } else {
         handleReset();
       }
@@ -69,17 +65,14 @@ export const GeminiFoodModal: React.FC<GeminiFoodModalProps> = ({
     setImageMimeType(file.type);
     const reader = new FileReader();
     reader.onload = () => {
-      const result = reader.result as string;
-      setImagePreview(result);
+      setImagePreview(reader.result as string);
       setErrorMsg(null);
     };
     reader.readAsDataURL(file);
   };
 
-  const handleAnalyze = async () => {
+  const handleStartBackgroundAnalysis = () => {
     setErrorMsg(null);
-    setAnalysisResult(null);
-
     const hasText = textInput.trim().length > 0;
     const hasImage = !!imagePreview;
 
@@ -88,26 +81,28 @@ export const GeminiFoodModal: React.FC<GeminiFoodModalProps> = ({
       return;
     }
 
-    setIsAnalyzing(true);
-    setStatusMessage('Analyzing nutrition & portion macros...');
-    abortControllerRef.current = new AbortController();
+    // Capture the current states before the modal closes
+    const promptTextValue = textInput.trim();
+    const targetMeal = selectedMeal;
+    const existingEditItem = itemToEdit;
+    
+    let capturedImageBase64: string | undefined = undefined;
+    if (imagePreview) {
+      const commaIndex = imagePreview.indexOf(',');
+      if (commaIndex !== -1) {
+        capturedImageBase64 = imagePreview.substring(commaIndex + 1);
+      }
+    }
+    const capturedMimeType = imageMimeType;
 
-    try {
-      // Use our new infinite retry wrapper to bypass 503 errors safely
+    // 1. Give the heavy lifting to the background task manager
+    runTask(`AI Logging: ${promptTextValue.substring(0, 20)}...`, async () => {
       const parsedNutritionData = await callGeminiWithInfiniteRetry(
         async (apiKey) => {
           const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`;
 
-          let imageBase64: string | undefined = undefined;
-          if (imagePreview) {
-            const commaIndex = imagePreview.indexOf(',');
-            if (commaIndex !== -1) {
-              imageBase64 = imagePreview.substring(commaIndex + 1);
-            }
-          }
-
           const promptText = `Analyze this food based on the provided ${hasImage ? 'image and text' : 'text'}. Extract or estimate the nutritional values.
-          User Input: ${hasText ? textInput.trim() : 'No text provided'}
+          User Input: ${hasText ? promptTextValue : 'No text provided'}
           
           IMPORTANT RULE FOR QUANTITIES: If the user specifies multiple servings (e.g. "3 eggs" or "2 bowls"), you MUST calculate and return the TOTAL combined macros for the entire quantity described. 
 
@@ -115,11 +110,11 @@ export const GeminiFoodModal: React.FC<GeminiFoodModalProps> = ({
           foodName, brand (string or 'generic'), servingSize, servingWeightGrams (number), calories (number), protein (number), carbs (number), fat (number), fiber (number), sugar (number), sodiumMg (number), confidence ('high', 'medium', 'low'), dietaryTags (array of strings), healthTip (string), breakdown (array of objects with keys: item, portion, calories, protein, carbs, fat).`;
 
           const parts: any[] = [{ text: promptText }];
-          if (imageBase64) {
+          if (capturedImageBase64) {
             parts.push({
               inlineData: {
-                mimeType: imageMimeType || 'image/jpeg',
-                data: imageBase64,
+                mimeType: capturedMimeType || 'image/jpeg',
+                data: capturedImageBase64,
               }
             });
           }
@@ -127,94 +122,69 @@ export const GeminiFoodModal: React.FC<GeminiFoodModalProps> = ({
           const res = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts }] }),
-            signal: abortControllerRef.current?.signal
+            body: JSON.stringify({ contents: [{ parts }] })
           });
 
           const rawText = await res.text();
-
-          if (rawText.trim().startsWith('<')) {
-            throw new Error("Network returned HTML instead of JSON. Check your internet connection.");
-          }
-
-          const resultData = JSON.parse(rawText);
-
-          if (resultData.error) {
-            throw new Error(resultData.error.message || 'Gemini API Error');
-          }
-
-          const modelOutput = resultData.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (rawText.trim().startsWith('<')) throw new Error("Network returned HTML instead of JSON. Check your internet connection.");
           
-          if (!modelOutput) {
-            throw new Error("Invalid response format from Gemini");
-          }
+          const resultData = JSON.parse(rawText);
+          if (resultData.error) throw new Error(resultData.error.message || 'Gemini API Error');
+          
+          const modelOutput = resultData.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (!modelOutput) throw new Error("Invalid response format from Gemini");
 
           const cleanedJson = modelOutput.replace(/```json/g, '').replace(/```/g, '').trim();
           return JSON.parse(cleanedJson);
         },
         (attempt, retryMsg) => {
-          setStatusMessage(retryMsg); // Silently updates the button text during an error spike!
-        },
-        abortControllerRef.current.signal
+          // You could optionally update a global task message here if you expand the task context
+          console.log(`Retry ${attempt}: ${retryMsg}`);
+        }
       );
 
-      setAnalysisResult(parsedNutritionData);
-      setServingMult(1);
-    } catch (err: any) {
-      if (err.message === 'ABORTED') return;
-      console.error('Gemini analysis error:', err);
-      setErrorMsg(err.message || 'Analysis error. Please check your API key and connection.');
-    } finally {
-      setIsAnalyzing(false);
-      setStatusMessage(null);
-    }
-  };
+      // Once the AI is done, immediately build and save the food item
+      const newFoodItem: FoodItem = {
+        id: existingEditItem ? existingEditItem.id : `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        name: parsedNutritionData.foodName || 'AI Analyzed Food',
+        brand: parsedNutritionData.brand !== 'generic' ? parsedNutritionData.brand : undefined,
+        servingSize: parsedNutritionData.servingSize || '1 portion',
+        servingWeightGrams: Math.round(parsedNutritionData.servingWeightGrams || 150),
+        servings: 1, // Defaulting to 1 since we told AI to calculate total combined macros
+        calories: Math.round(parsedNutritionData.calories),
+        protein: Math.round(parsedNutritionData.protein * 10) / 10,
+        carbs: Math.round(parsedNutritionData.carbs * 10) / 10,
+        fat: Math.round(parsedNutritionData.fat * 10) / 10,
+        fiber: Math.round(parsedNutritionData.fiber * 10) / 10,
+        sugar: Math.round((parsedNutritionData.sugar || 0) * 10) / 10,
+        sodiumMg: Math.round((parsedNutritionData.sodiumMg || 0)),
+        source: 'ai',
+        originalPrompt: promptTextValue || undefined,
+        confidence: parsedNutritionData.confidence || 'high',
+        dietaryTags: parsedNutritionData.dietaryTags,
+        healthTip: parsedNutritionData.healthTip,
+        loggedAt: existingEditItem ? existingEditItem.loggedAt : new Date().toISOString(),
+        mealType: targetMeal,
+      };
 
-  const handleConfirmLog = () => {
-    if (!analysisResult) return;
+      onFoodLogged(newFoodItem);
+    });
 
-    const newFoodItem: FoodItem = {
-      // If we are editing, keep the same ID so Dashboard overwrites it. Otherwise make a new ID.
-      id: itemToEdit ? itemToEdit.id : `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-      name: analysisResult.foodName || 'AI Analyzed Food',
-      brand: analysisResult.brand !== 'generic' ? analysisResult.brand : undefined,
-      servingSize: analysisResult.servingSize || '1 portion',
-      servingWeightGrams: Math.round((analysisResult.servingWeightGrams || 150) * servingMult),
-      servings: servingMult,
-      calories: Math.round(analysisResult.calories * servingMult),
-      protein: Math.round(analysisResult.protein * servingMult * 10) / 10,
-      carbs: Math.round(analysisResult.carbs * servingMult * 10) / 10,
-      fat: Math.round(analysisResult.fat * servingMult * 10) / 10,
-      fiber: Math.round(analysisResult.fiber * servingMult * 10) / 10,
-      sugar: Math.round((analysisResult.sugar || 0) * servingMult * 10) / 10,
-      sodiumMg: Math.round((analysisResult.sodiumMg || 0) * servingMult),
-      source: 'ai',
-      originalPrompt: textInput.trim() || undefined, // SAVES THE PROMPT SO IT CAN BE EDITED LATER!
-      confidence: analysisResult.confidence || 'high',
-      dietaryTags: analysisResult.dietaryTags,
-      healthTip: analysisResult.healthTip,
-      loggedAt: itemToEdit ? itemToEdit.loggedAt : new Date().toISOString(),
-      mealType: selectedMeal,
-    };
-
-    onFoodLogged(newFoodItem);
+    // 2. Close the modal instantly so the user can go back to their dashboard while it runs!
     handleReset();
     onClose();
   };
 
   const handleReset = () => {
-    setAnalysisResult(null);
     setTextInput('');
     setImagePreview(null);
     setErrorMsg(null);
-    setStatusMessage(null);
-    setServingMult(1);
-    abortControllerRef.current?.abort();
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/85 backdrop-blur-md overflow-y-auto">
       <div className="relative w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] my-auto">
+        
         {/* Header */}
         <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-800 bg-slate-900/90 shrink-0">
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
@@ -256,7 +226,7 @@ export const GeminiFoodModal: React.FC<GeminiFoodModalProps> = ({
                 <button
                   key={meal}
                   onClick={() => setSelectedMeal(meal)}
-                  className={`py-2 px-3 text-xs font-semibold capitalize rounded-xl border transition-all ${
+                  className={`py-2 px-3 text-xs font-semibold capitalize rounded-xl border transition-all cursor-pointer ${
                     selectedMeal === meal
                       ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/50 shadow-sm'
                       : 'bg-slate-800/60 text-slate-400 border-slate-700/60 hover:text-slate-200 hover:bg-slate-800'
@@ -268,323 +238,144 @@ export const GeminiFoodModal: React.FC<GeminiFoodModalProps> = ({
             </div>
           </div>
 
-          {/* If Result Ready, Show Rich Breakdown */}
-          {analysisResult ? (
-            <div className="bg-slate-950 border border-indigo-500/30 rounded-2xl p-4 sm:p-5 space-y-5">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="space-y-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-mono text-indigo-400 uppercase tracking-wide">
-                      AI Verified Nutrition
-                    </span>
-                    {analysisResult.confidence && (
-                      <span className="text-[11px] font-medium px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300">
-                        Confidence: <span className="text-emerald-400 capitalize">{analysisResult.confidence}</span>
-                      </span>
-                    )}
-                  </div>
-                  <h4 className="text-lg sm:text-xl font-bold text-slate-100">{analysisResult.foodName}</h4>
-                  <p className="text-xs text-slate-400">
-                    Estimated Portion: {analysisResult.servingSize} (approx. {analysisResult.servingWeightGrams}g)
-                  </p>
-                </div>
-
-                <button
-                  onClick={() => setAnalysisResult(null)}
-                  className="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 bg-slate-900 hover:bg-slate-800 rounded-lg border border-slate-800 transition-colors flex items-center gap-1.5 shrink-0 cursor-pointer"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" /> Adjust Prompt
-                </button>
-              </div>
-
-              {/* Macro Cards Grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
-                <div className="p-2.5 sm:p-3 bg-slate-900/90 rounded-xl border border-slate-800 text-center">
-                  <span className="text-[11px] sm:text-xs text-slate-400 block">Total Energy</span>
-                  <span className="text-lg sm:text-xl font-bold font-mono text-emerald-400">
-                    {Math.round(analysisResult.calories * servingMult)}
-                  </span>
-                  <span className="text-[10px] text-slate-500 block">kcal</span>
-                </div>
-                <div className="p-2.5 sm:p-3 bg-slate-900/90 rounded-xl border border-slate-800 text-center">
-                  <span className="text-[11px] sm:text-xs text-slate-400 block">Protein</span>
-                  <span className="text-lg sm:text-xl font-bold font-mono text-cyan-400">
-                    {Math.round(analysisResult.protein * servingMult * 10) / 10}g
-                  </span>
-                  <span className="text-[10px] text-slate-500 block">
-                    {Math.round(analysisResult.protein * servingMult * 4)} kcal
-                  </span>
-                </div>
-                <div className="p-2.5 sm:p-3 bg-slate-900/90 rounded-xl border border-slate-800 text-center">
-                  <span className="text-[11px] sm:text-xs text-slate-400 block">Carbs</span>
-                  <span className="text-lg sm:text-xl font-bold font-mono text-amber-400">
-                    {Math.round(analysisResult.carbs * servingMult * 10) / 10}g
-                  </span>
-                  <span className="text-[10px] text-slate-500 block">
-                    {Math.round(analysisResult.carbs * servingMult * 4)} kcal
-                  </span>
-                </div>
-                <div className="p-2.5 sm:p-3 bg-slate-900/90 rounded-xl border border-slate-800 text-center">
-                  <span className="text-[11px] sm:text-xs text-slate-400 block">Fat</span>
-                  <span className="text-lg sm:text-xl font-bold font-mono text-rose-400">
-                    {Math.round(analysisResult.fat * servingMult * 10) / 10}g
-                  </span>
-                  <span className="text-[10px] text-slate-500 block">
-                    {Math.round(analysisResult.fat * servingMult * 9)} kcal
-                  </span>
-                </div>
-              </div>
-
-              {/* Secondary Nutrients */}
-              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400 px-1 font-mono">
-                <span>Fiber: {Math.round(analysisResult.fiber * servingMult * 10) / 10}g</span>
-                <span>Sugar: {Math.round((analysisResult.sugar || 0) * servingMult * 10) / 10}g</span>
-                <span>Sodium: {Math.round((analysisResult.sodiumMg || 0) * servingMult)}mg</span>
-              </div>
-
-              {/* Itemized Meal Components */}
-              {analysisResult.breakdown && analysisResult.breakdown.length > 0 && (
-                <div className="space-y-2 pt-2 border-t border-slate-800/80">
-                  <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                    <Layers className="w-3.5 h-3.5 text-indigo-400" /> Detected Ingredients &amp; Portions
-                  </span>
-                  <div className="space-y-2">
-                    {analysisResult.breakdown.map((part: any, idx: number) => (
-                      <div
-                        key={idx}
-                        className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-slate-900/70 rounded-xl border border-slate-800/80 text-xs"
-                      >
-                        <div className="min-w-0 flex-1 pr-2">
-                          <span className="font-semibold text-slate-200 block truncate">{part.item}</span>
-                          <span className="text-[11px] text-slate-400 font-mono">Portion: {part.portion}</span>
-                        </div>
-
-                        <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800/60 font-mono shrink-0">
-                          <span className="text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-md">
-                            {Math.round(part.calories * servingMult)} kcal
-                          </span>
-                          <div className="flex items-center gap-2 text-slate-400 text-[11px]">
-                            <span>P:{Math.round(part.protein * servingMult)}g</span>
-                            <span>C:{Math.round(part.carbs * servingMult)}g</span>
-                            <span>F:{Math.round(part.fat * servingMult)}g</span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Dietary Tags */}
-              {analysisResult.dietaryTags && analysisResult.dietaryTags.length > 0 && (
-                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
-                  <span className="text-slate-500">Dietary Profile:</span>
-                  {analysisResult.dietaryTags.map((tag: string, i: number) => (
-                    <span key={i} className="text-slate-300">
-                      {tag}
-                      {i < analysisResult.dietaryTags.length - 1 ? ' ·' : ''}
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              {/* Health & Nutritionist Tip */}
-              {analysisResult.healthTip && (
-                <div className="p-3.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-xs text-indigo-200 flex items-start gap-2.5">
-                  <Sparkles className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-semibold block mb-0.5">Clinical Nutritionist Insight</span>
-                    <span>{analysisResult.healthTip}</span>
-                  </div>
-                </div>
-              )}
-
-              {/* Log Button */}
+          <div className="space-y-5">
+            {/* Tabs: Text vs Image */}
+            <div className="grid grid-cols-2 gap-1 p-1 bg-slate-950 rounded-xl border border-slate-800">
               <button
-                onClick={handleConfirmLog}
-                className="w-full py-3.5 px-4 bg-indigo-500 hover:bg-indigo-400 text-white font-bold text-sm rounded-xl transition-all shadow-lg shadow-indigo-500/25 flex items-center justify-center gap-2 cursor-pointer"
+                onClick={() => setActiveTab('text')}
+                className={`py-2 px-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  activeTab === 'text'
+                    ? 'bg-slate-800 text-indigo-300 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
               >
-                <CheckCircle className="w-5 h-5" />
-                {itemToEdit ? 'Save Edited Entry' : `Add to ${selectedMeal.charAt(0).toUpperCase() + selectedMeal.slice(1)}`} (
-                {Math.round(analysisResult.calories * servingMult)} kcal)
+                <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">AI Text Prompt</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('image')}
+                className={`py-2 px-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  activeTab === 'image'
+                    ? 'bg-slate-800 text-indigo-300 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Camera className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">Photo Upload</span>
               </button>
             </div>
-          ) : (
-            /* Input Selector Form */
-            <div className="space-y-5">
-              {/* Tabs: Text vs Image */}
-              <div className="grid grid-cols-2 gap-1 p-1 bg-slate-950 rounded-xl border border-slate-800">
-                <button
-                  onClick={() => setActiveTab('text')}
-                  className={`py-2 px-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                    activeTab === 'text'
-                      ? 'bg-slate-800 text-indigo-300 shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <Sparkles className="w-3.5 h-3.5 shrink-0" />
-                  <span className="truncate">AI Text Prompt</span>
-                </button>
-                <button
-                  onClick={() => setActiveTab('image')}
-                  className={`py-2 px-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                    activeTab === 'image'
-                      ? 'bg-slate-800 text-indigo-300 shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <Camera className="w-3.5 h-3.5 shrink-0" />
-                  <span className="truncate">Photo Upload</span>
-                </button>
-              </div>
-    
-              {activeTab === 'text' ? (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-2 flex items-center justify-between">
-                      <span>{itemToEdit ? 'Modify your previous prompt:' : 'Describe what you ate or drank:'}</span>
-                      {isAnalyzing && (
-                        <button onClick={() => abortControllerRef.current?.abort()} className="text-rose-400 hover:text-rose-300 underline cursor-pointer">
-                          Cancel
+  
+            {activeTab === 'text' ? (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-2">
+                    {itemToEdit ? 'Modify your previous prompt:' : 'Describe what you ate or drank:'}
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={textInput}
+                    onChange={(e) => setTextInput(e.target.value)}
+                    placeholder="e.g. 150g grilled ribeye steak with a baked sweet potato and 1 cup sauteed green beans in butter..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors resize-none"
+                  />
+                </div>
+
+                {/* Preset Quick Injections (Hide when editing) */}
+                {!itemToEdit && (
+                  <div className="space-y-2">
+                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
+                      Quick Ideas (Click to Test)
+                    </span>
+                    <div className="space-y-1.5">
+                      {QUICK_PROMPT_PRESETS.map((preset, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => setTextInput(preset)}
+                          className="w-full p-2.5 text-left text-xs bg-slate-950 hover:bg-slate-800/80 border border-slate-800/70 hover:border-slate-700 rounded-xl text-slate-300 hover:text-indigo-300 transition-all flex items-center justify-between group cursor-pointer"
+                        >
+                          <span className="truncate pr-2">{preset}</span>
+                          <ChevronRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-indigo-400 shrink-0" />
                         </button>
-                      )}
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  className="border-2 border-dashed border-slate-700 bg-slate-950/60 rounded-2xl p-6 text-center transition-all hover:border-indigo-500/80 hover:bg-slate-900/40 cursor-pointer"
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    className="hidden"
+                  />
+
+                  {imagePreview ? (
+                    <div className="space-y-3">
+                      <img
+                        src={imagePreview}
+                        alt="Meal Preview"
+                        className="max-h-56 mx-auto rounded-xl object-contain border border-slate-800 shadow-md"
+                      />
+                      <p className="text-xs text-indigo-400 font-medium">
+                        Click to change or choose a different image
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 py-4">
+                      <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center mx-auto">
+                        <Upload className="w-6 h-6" />
+                      </div>
+                      <h4 className="text-sm font-bold text-slate-200">
+                        Upload Meal Photo or Nutrition Facts Label
+                      </h4>
+                      <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                        Take a photo of your plate, takeout box, or package label. Gemini will extract portions and compute exact macros.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {imagePreview && (
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                      Optional note or context for AI:
                     </label>
-                    <textarea
-                      rows={4}
+                    <input
+                      type="text"
                       value={textInput}
                       onChange={(e) => setTextInput(e.target.value)}
-                      disabled={isAnalyzing}
-                      placeholder="e.g. 150g grilled ribeye steak with a baked sweet potato and 1 cup sauteed green beans in butter..."
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors resize-none disabled:opacity-50"
+                      placeholder="e.g. Dressing on the side, cooked in olive oil, no cheese..."
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
                     />
                   </div>
-
-                  {/* Preset Quick Injections (Hide when editing) */}
-                  {!itemToEdit && (
-                    <div className="space-y-2">
-                      <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
-                        Quick Ideas (Click to Test)
-                      </span>
-                      <div className="space-y-1.5">
-                        {QUICK_PROMPT_PRESETS.map((preset, i) => (
-                          <button
-                            key={i}
-                            type="button"
-                            onClick={() => setTextInput(preset)}
-                            disabled={isAnalyzing}
-                            className="w-full p-2.5 text-left text-xs bg-slate-950 hover:bg-slate-800/80 border border-slate-800/70 hover:border-slate-700 rounded-xl text-slate-300 hover:text-indigo-300 transition-all flex items-center justify-between group disabled:opacity-50 cursor-pointer"
-                          >
-                            <span className="truncate pr-2">{preset}</span>
-                            <ChevronRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-indigo-400 shrink-0" />
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div
-                    onClick={() => !isAnalyzing && fileInputRef.current?.click()}
-                    className={`border-2 border-dashed border-slate-700 bg-slate-950/60 rounded-2xl p-6 text-center transition-all ${isAnalyzing ? 'opacity-50 cursor-not-allowed' : 'hover:border-indigo-500/80 hover:bg-slate-900/40 cursor-pointer'}`}
-                  >
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*"
-                      onChange={handleImageUpload}
-                      className="hidden"
-                      disabled={isAnalyzing}
-                    />
-
-                    {imagePreview ? (
-                      <div className="space-y-3">
-                        <img
-                          src={imagePreview}
-                          alt="Meal Preview"
-                          className="max-h-56 mx-auto rounded-xl object-contain border border-slate-800 shadow-md"
-                        />
-                        <p className="text-xs text-indigo-400 font-medium">
-                          Click to change or choose a different image
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="space-y-2 py-4">
-                        <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center mx-auto">
-                          <Upload className="w-6 h-6" />
-                        </div>
-                        <h4 className="text-sm font-bold text-slate-200">
-                          Upload Meal Photo or Nutrition Facts Label
-                        </h4>
-                        <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                          Take a photo of your plate, takeout box, or package label. Gemini will extract portions and compute exact macros.
-                        </p>
-                      </div>
-                    )}
-                  </div>
-
-                  {imagePreview && (
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center justify-between">
-                        <span>Optional note or context for AI:</span>
-                        {isAnalyzing && (
-                          <button onClick={() => abortControllerRef.current?.abort()} className="text-rose-400 hover:text-rose-300 underline cursor-pointer">
-                            Cancel
-                          </button>
-                        )}
-                      </label>
-                      <input
-                        type="text"
-                        value={textInput}
-                        onChange={(e) => setTextInput(e.target.value)}
-                        disabled={isAnalyzing}
-                        placeholder="e.g. Dressing on the side, cooked in olive oil, no cheese..."
-                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 disabled:opacity-50"
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {errorMsg && (
-                <div className="p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs text-rose-300 flex items-start justify-between gap-3">
-                  <div className="flex items-start gap-2">
-                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                    <div>
-                      <span className="font-semibold block">Error processing request</span>
-                      <span>{errorMsg}</span>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleAnalyze}
-                    className="px-2.5 py-1 bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-500/40 rounded-xl text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer"
-                  >
-                    Retry Now
-                  </button>
-                </div>
-              )}
-
-              {/* Submit Button */}
-              <button
-                onClick={handleAnalyze}
-                disabled={isAnalyzing || (!textInput.trim() && !imagePreview)}
-                className="w-full py-3.5 px-4 bg-indigo-500 hover:bg-indigo-400 disabled:opacity-50 text-white font-bold text-sm rounded-xl transition-all shadow-lg shadow-indigo-500/25 flex items-center justify-center gap-2 cursor-pointer"
-              >
-                {isAnalyzing ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-                    <span className="truncate">{statusMessage || 'Analyzing nutrition & portion macros...'}</span>
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-4 h-4 shrink-0" />
-                    <span>{itemToEdit ? 'Re-Calculate Macros' : 'Calculate Macros with Gemini AI'}</span>
-                  </>
                 )}
-              </button>
-            </div>
-          )}
+              </div>
+            )}
+
+            {errorMsg && (
+              <div className="p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs text-rose-300 flex items-start gap-2">
+                <span className="font-semibold block shrink-0">Error:</span>
+                <span>{errorMsg}</span>
+              </div>
+            )}
+
+            {/* Submit Button */}
+            <button
+              onClick={handleStartBackgroundAnalysis}
+              disabled={!textInput.trim() && !imagePreview}
+              className="w-full py-3.5 px-4 bg-indigo-500 hover:bg-indigo-400 disabled:opacity-50 text-white font-bold text-sm rounded-xl transition-all shadow-lg shadow-indigo-500/25 flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <Sparkles className="w-4 h-4 shrink-0" />
+              <span>{itemToEdit ? 'Save Edit in Background' : 'Calculate & Log in Background'}</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

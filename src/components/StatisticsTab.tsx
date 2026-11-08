@@ -247,7 +247,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
 
       </div>
 
-      {/* Render Report Modals with currentDate passed down */}
+      {/* Render Report Modals */}
       <WeeklyReportCard 
         logs={logs} 
         profile={profile} 
@@ -411,7 +411,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
         </div>
       </div>
 
-      {/* Daily Habit Heatmap - Clean borders */}
+      {/* Daily Habit Heatmap */}
       <div className={`p-4 sm:p-6 ${t.cardBg} border ${t.cardBorder} rounded-2xl ${t.shadow} space-y-4 w-full relative transition-colors`}>
         <div className={`flex flex-col md:flex-row md:items-center justify-between gap-3 pb-1 border-b ${t.innerBorder} mb-2 transition-colors`}>
           <div className="flex items-center justify-between w-full md:w-auto gap-4">
@@ -428,7 +428,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
 
           <div className={`flex flex-wrap items-center gap-2 sm:gap-3 text-[11px] sm:text-xs font-mono ${t.textSecondary} transition-colors`}>
             <div className="flex items-center gap-1.5">
-              <div className={`w-2.5 h-2.5 rounded ${t.bgAmber} shadow-sm shrink-0`} />
+              <div className={`w-2.5 h-2.5 rounded ${t.bgAmber} shadow-sm shrink-0 animate-pulse`} />
               <span>Perfect</span>
             </div>
             <div className="flex items-center gap-1.5">
@@ -468,7 +468,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
                 <div
                   className={`w-full h-1.5 rounded-full mb-2 ${
                     day.isPerfect
-                      ? `${t.bgAmber} shadow-sm`
+                      ? `${t.bgAmber} shadow-sm animate-pulse` // Added pulse animation here
                       : day.hitProtein
                       ? t.bgCyan
                       : day.hitCalories
@@ -487,7 +487,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
                         <Activity className={`w-3 h-3 ${t.accentOrange}`} />
                       </span>
                     )}
-                    {day.isPerfect && <Award className={`w-3.5 h-3.5 ${t.accentAmber}`} />}
+                    {day.isPerfect && <Award className={`w-3.5 h-3.5 ${t.accentAmber} animate-pulse`} />} {/* Added pulse animation to Award icon */}
                   </div>
                 </div>
 
@@ -522,7 +522,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
               className={`rounded-xl border border-slate-800/40 ${t.innerBg} ${t.btnHover} ${t.textSecondary} hover:${t.textPrimary} transition-all flex flex-col items-center justify-center cursor-pointer group 
                 ${isHeatmapExpanded 
                   ? 'col-span-2 sm:col-span-4 md:col-span-7 h-12 flex-row gap-2 py-0 min-h-0' 
-                  : 'col-span-1 p-2.5 sm:p-3 min-h-24'
+                  : 'col-span-1 p-2.5 sm:p-3 min-h-[96px]'
                 }`}
               title={isHeatmapExpanded ? "Show Less" : "Expand Heatmap"}
             >
@@ -701,3 +701,5 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
     </div>
   );
 };
+
+export default StatisticsTab;

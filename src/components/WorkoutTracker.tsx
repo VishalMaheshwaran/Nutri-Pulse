@@ -1,7 +1,9 @@
+// src/components/WorkoutTracker.tsx
 import React, { useState } from 'react';
-import { Activity, Flame, RefreshCw, Trash2, Sparkles, Copy, Check, Bookmark } from 'lucide-react';
+import { Activity, Flame, Trash2, Sparkles, Copy, Check, Bookmark } from 'lucide-react';
 import { WorkoutItem, UserProfile, SavedWorkout } from '../types/nutrition';
 import { getStoredApiKey, hasConnectedApiKey } from '../utils/geminiStorage';
+import { useTasks } from '../context/TaskContext';
 
 interface WorkoutTrackerProps {
   workouts: WorkoutItem[];
@@ -20,30 +22,36 @@ export const WorkoutTracker: React.FC<WorkoutTrackerProps> = ({
   onSaveRoutine,
   onOpenSavedWorkouts,
 }) => {
+  const { runTask } = useTasks(); // <-- Bringing in the background manager!
+  
   const [inputText, setInputText] = useState('');
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [savedRoutineId, setSavedRoutineId] = useState<string | null>(null);
 
   const apiReady = hasConnectedApiKey();
   const totalBurned = workouts.reduce((sum, w) => sum + w.caloriesBurned, 0);
 
-  const handleAnalyzeWorkout = async (e: React.FormEvent) => {
+  const handleAnalyzeWorkout = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputText.trim() || !apiReady) return;
+    
+    const workoutPrompt = inputText.trim();
+    if (!workoutPrompt || !apiReady) return;
 
-    setIsAnalyzing(true);
-    try {
+    // 1. Clear input instantly for better UX
+    setInputText(''); 
+
+    // 2. Offload the heavy lifting to the global background manager
+    runTask(`Logging Workout: ${workoutPrompt.substring(0, 15)}...`, async () => {
       const apiKey = getStoredApiKey();
       if (!apiKey) {
-        return;
+        throw new Error('API Key is missing');
       }
       
       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`;
 
       const promptText = `Analyze this workout input and estimate calories burned. Return ONLY a raw, minified JSON object with no markdown or formatting.
       User Profile: ${profile.gender}, ${profile.age} years old, ${profile.weightKg}kg, ${profile.heightCm}cm. Activity Level: ${profile.activityLevel}.
-      Workout Input: "${inputText}"
+      Workout Input: "${workoutPrompt}"
       
       The JSON MUST have these exact keys:
       description (string: a clean summary of the workout), caloriesBurned (number: integer estimate based on profile), durationMinutes (number: integer), avgBpm (number: estimated average heart rate, or null), sets (array of objects with keys: name, reps, weight).`;
@@ -65,7 +73,6 @@ export const WorkoutTracker: React.FC<WorkoutTrackerProps> = ({
       const rawText = await res.text();
 
       if (rawText.trim().startsWith('<')) {
-        console.error("HTML Error Page received:", rawText);
         throw new Error("Network returned HTML instead of JSON. Check your internet connection.");
       }
 
@@ -94,13 +101,9 @@ export const WorkoutTracker: React.FC<WorkoutTrackerProps> = ({
         loggedAt: new Date().toISOString(),
       };
 
+      // 3. Automatically append the workout to the diary when finished!
       onUpdateWorkouts([newItem, ...workouts]);
-      setInputText('');
-    } catch (err: any) {
-      console.error('Workout analysis error:', err);
-    } finally {
-      setIsAnalyzing(false);
-    }
+    });
   };
 
   const handleDelete = (id: string) => {
@@ -162,13 +165,13 @@ export const WorkoutTracker: React.FC<WorkoutTrackerProps> = ({
           type="text"
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
-          disabled={!apiReady || isAnalyzing}
+          disabled={!apiReady}
           placeholder={apiReady ? "e.g. 80 mins biceps, 10 sets..." : "Connect Gemini API Key in Settings to unlock AI workout logging"}
           className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-orange-500 disabled:opacity-40 disabled:cursor-not-allowed"
         />
         <button
           type="submit"
-          disabled={!apiReady || isAnalyzing || !inputText.trim()}
+          disabled={!apiReady || !inputText.trim()}
           title={!apiReady ? "Connect Gemini API Key in Settings to unlock" : "Log Workout"}
           className={`px-3 py-2 font-bold text-xs rounded-xl transition-colors flex items-center gap-1.5 shrink-0 ${
             apiReady 
@@ -176,7 +179,7 @@ export const WorkoutTracker: React.FC<WorkoutTrackerProps> = ({
               : 'bg-slate-800 text-slate-500 opacity-40 cursor-not-allowed'
           }`}
         >
-          {isAnalyzing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+          <Sparkles className="w-3.5 h-3.5" />
           <span className="hidden sm:inline">Log Workout</span>
         </button>
       </form>

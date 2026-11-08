@@ -33,6 +33,10 @@ import { DailyReportModal } from './components/DailyReportModal';
 import { updateLiveTrackerNotification } from './services/notifications';
 import { useTheme } from './hooks/useTheme';
 
+// Import the new background task manager and context
+import { TaskProvider } from './context/TaskContext';
+import { TaskManager } from './components/TaskManager';
+
 export default function App() {
   const { t } = useTheme();
   
@@ -263,104 +267,111 @@ export default function App() {
   const snackItems = currentLog.items.filter((i) => i.mealType === 'snack');
 
   return (
-    <div
-      className={`min-h-screen ${t.globalBg} ${t.textPrimary} flex flex-col font-sans w-full transition-colors duration-300`}
-      style={{ paddingTop: 'calc(env(safe-area-inset-top) + 70px)' }}
-    >
-      <TopBar
-        currentDate={currentDate} onDateChange={setCurrentDate}
-        onOpenBarcode={() => openBarcodeForMeal(activeMealTarget)} onOpenGemini={() => openGeminiForMeal(activeMealTarget)}
-        onOpenSavedFoods={() => openSavedFoodsForMeal(activeMealTarget)} onOpenProfile={() => setIsProfileOpen(true)}
-        activeView={activeView} setActiveView={setActiveView} logs={logs} profile={profile}
-      />
+    <TaskProvider>
+      <div
+        className={`min-h-screen ${t.globalBg} ${t.textPrimary} flex flex-col font-sans w-full transition-colors duration-300`}
+        style={{ paddingTop: 'calc(env(safe-area-inset-top) + 70px)' }}
+      >
+        <TopBar
+          currentDate={currentDate} onDateChange={setCurrentDate}
+          onOpenBarcode={() => openBarcodeForMeal(activeMealTarget)} onOpenGemini={() => openGeminiForMeal(activeMealTarget)}
+          onOpenSavedFoods={() => openSavedFoodsForMeal(activeMealTarget)} onOpenProfile={() => setIsProfileOpen(true)}
+          activeView={activeView} setActiveView={setActiveView} logs={logs} profile={profile}
+        />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6 pb-28 md:pb-8 space-y-4 sm:space-y-6 overflow-x-hidden">
-        {activeView === 'dashboard' && (
-          <div className="space-y-5 sm:space-y-7 w-full">
-            
-            {/* PERFECT DAY STREAK BANNER ON HOME PAGE */}
-            <div className={`p-3.5 sm:p-4 ${t.cardBg} border ${t.cardBorder} rounded-2xl ${t.shadow} flex items-center justify-between gap-3 transition-colors`}>
-              <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-xl ${t.innerBg} border ${t.innerBorder} flex items-center justify-center ${t.accentAmber} shrink-0`}>
-                  <Trophy className="w-5 h-5 animate-badge-blink" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className={`text-xs sm:text-sm font-extrabold ${t.textPrimary}`}>
-                      Perfect Day Streak
-                    </h3>
-                    <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full ${t.innerBg} border ${t.innerBorder} ${t.accentAmber}`}>
-                      {totalPerfectDays} Gold Badges
-                    </span>
+        <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6 pb-28 md:pb-8 space-y-4 sm:space-y-6 overflow-x-hidden">
+          {activeView === 'dashboard' && (
+            <div className="space-y-5 sm:space-y-7 w-full">
+              
+              {/* PERFECT DAY STREAK BANNER ON HOME PAGE */}
+              <div className={`p-3.5 sm:p-4 ${t.cardBg} border ${t.cardBorder} rounded-2xl ${t.shadow} flex items-center justify-between gap-3 transition-colors`}>
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-xl ${t.innerBg} border ${t.innerBorder} flex items-center justify-center ${t.accentAmber} shrink-0`}>
+                    {/* Updated to native tailwind animate-pulse */}
+                    <Trophy className="w-5 h-5 animate-pulse" />
                   </div>
-                  <p className={`text-[11px] ${t.textSecondary} mt-0.5`}>
-                    Hit both your Calorie &amp; Protein targets to unlock a Perfect Day
-                  </p>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className={`text-xs sm:text-sm font-extrabold ${t.textPrimary}`}>
+                        Perfect Day Streak
+                      </h3>
+                      <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full ${t.innerBg} border ${t.innerBorder} ${t.accentAmber}`}>
+                        {totalPerfectDays} Gold Badges
+                      </span>
+                    </div>
+                    <p className={`text-[11px] ${t.textSecondary} mt-0.5`}>
+                      Hit both your Calorie &amp; Protein targets to unlock a Perfect Day
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 shrink-0">
+                  <Flame className="w-4 h-4 text-amber-400" />
+                  <span className="text-sm sm:text-base font-extrabold font-mono text-amber-400">
+                    {perfectStreak}d
+                  </span>
                 </div>
               </div>
 
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 shrink-0">
-                <Flame className="w-4 h-4 text-amber-400" />
-                <span className="text-sm sm:text-base font-extrabold font-mono text-amber-400">
-                  {perfectStreak}d
-                </span>
-              </div>
-            </div>
+              <MacroRings totals={totals} profile={profile} caloriesBurned={burnedCalories} />
 
-            <MacroRings totals={totals} profile={profile} caloriesBurned={burnedCalories} />
-
-            <div className="space-y-4 sm:space-y-5 w-full">
-              <div className="flex items-center justify-between gap-2">
-                <div>
-                  <h2 className="text-base sm:text-lg font-bold">Daily Food &amp; Meal Log</h2>
-                  <p className={`text-xs ${t.textSecondary}`}>Grouped by breakfast, lunch, dinner, and snacks</p>
+              <div className="space-y-4 sm:space-y-5 w-full">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <h2 className="text-base sm:text-lg font-bold">Daily Food &amp; Meal Log</h2>
+                    <p className={`text-xs ${t.textSecondary}`}>Grouped by breakfast, lunch, dinner, and snacks</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsDailyReportOpen(true)}
+                    className={`shrink-0 py-2 px-3.5 ${t.innerBg} border ${t.innerBorder} hover:${t.cardBg} rounded-xl text-xs font-bold ${t.accentCyan} flex items-center gap-1.5 transition-colors cursor-pointer`}
+                  >
+                    {/* Updated to native tailwind animate-pulse */}
+                    <Sparkles className="w-4 h-4 animate-pulse" />
+                    AI Daily Report
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setIsDailyReportOpen(true)}
-                  className={`shrink-0 py-2 px-3.5 ${t.innerBg} border ${t.innerBorder} hover:${t.cardBg} rounded-xl text-xs font-bold ${t.accentCyan} flex items-center gap-1.5 transition-colors cursor-pointer`}
-                >
-                  <Sparkles className="w-4 h-4 animate-badge-blink" />
-                  AI Daily Report
-                </button>
+
+                <div className="grid grid-cols-1 gap-4 sm:gap-5 w-full">
+                  <MealSection mealType="breakfast" items={breakfastItems} onOpenCamera={openBarcodeForMeal} onOpenGemini={openGeminiForMeal} onOpenSavedFoods={openSavedFoodsForMeal} onUpdateServing={handleUpdateServing} onUpdateItem={handleUpdateItem} onDeleteItem={handleDeleteItem} onCopyEntry={handleCopyEntry} onCopyMeal={handleCopyMeal} onSaveToFavorites={handleSaveToFavorites} onQuickAdd={handleQuickAdd} />
+                  <MealSection mealType="lunch" items={lunchItems} onOpenCamera={openBarcodeForMeal} onOpenGemini={openGeminiForMeal} onOpenSavedFoods={openSavedFoodsForMeal} onUpdateServing={handleUpdateServing} onUpdateItem={handleUpdateItem} onDeleteItem={handleDeleteItem} onCopyEntry={handleCopyEntry} onCopyMeal={handleCopyMeal} onSaveToFavorites={handleSaveToFavorites} onQuickAdd={handleQuickAdd} />
+                  <MealSection mealType="dinner" items={dinnerItems} onOpenCamera={openBarcodeForMeal} onOpenGemini={openGeminiForMeal} onOpenSavedFoods={openSavedFoodsForMeal} onUpdateServing={handleUpdateServing} onUpdateItem={handleUpdateItem} onDeleteItem={handleDeleteItem} onCopyEntry={handleCopyEntry} onCopyMeal={handleCopyMeal} onSaveToFavorites={handleSaveToFavorites} onQuickAdd={handleQuickAdd} />
+                  <MealSection mealType="snack" items={snackItems} onOpenCamera={openBarcodeForMeal} onOpenGemini={openGeminiForMeal} onOpenSavedFoods={openSavedFoodsForMeal} onUpdateServing={handleUpdateServing} onUpdateItem={handleUpdateItem} onDeleteItem={handleDeleteItem} onCopyEntry={handleCopyEntry} onCopyMeal={handleCopyMeal} onSaveToFavorites={handleSaveToFavorites} onQuickAdd={handleQuickAdd} />
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-4 sm:gap-5 w-full">
-                <MealSection mealType="breakfast" items={breakfastItems} onOpenCamera={openBarcodeForMeal} onOpenGemini={openGeminiForMeal} onOpenSavedFoods={openSavedFoodsForMeal} onUpdateServing={handleUpdateServing} onUpdateItem={handleUpdateItem} onDeleteItem={handleDeleteItem} onCopyEntry={handleCopyEntry} onCopyMeal={handleCopyMeal} onSaveToFavorites={handleSaveToFavorites} onQuickAdd={handleQuickAdd} />
-                <MealSection mealType="lunch" items={lunchItems} onOpenCamera={openBarcodeForMeal} onOpenGemini={openGeminiForMeal} onOpenSavedFoods={openSavedFoodsForMeal} onUpdateServing={handleUpdateServing} onUpdateItem={handleUpdateItem} onDeleteItem={handleDeleteItem} onCopyEntry={handleCopyEntry} onCopyMeal={handleCopyMeal} onSaveToFavorites={handleSaveToFavorites} onQuickAdd={handleQuickAdd} />
-                <MealSection mealType="dinner" items={dinnerItems} onOpenCamera={openBarcodeForMeal} onOpenGemini={openGeminiForMeal} onOpenSavedFoods={openSavedFoodsForMeal} onUpdateServing={handleUpdateServing} onUpdateItem={handleUpdateItem} onDeleteItem={handleDeleteItem} onCopyEntry={handleCopyEntry} onCopyMeal={handleCopyMeal} onSaveToFavorites={handleSaveToFavorites} onQuickAdd={handleQuickAdd} />
-                <MealSection mealType="snack" items={snackItems} onOpenCamera={openBarcodeForMeal} onOpenGemini={openGeminiForMeal} onOpenSavedFoods={openSavedFoodsForMeal} onUpdateServing={handleUpdateServing} onUpdateItem={handleUpdateItem} onDeleteItem={handleDeleteItem} onCopyEntry={handleCopyEntry} onCopyMeal={handleCopyMeal} onSaveToFavorites={handleSaveToFavorites} onQuickAdd={handleQuickAdd} />
-              </div>
+              <WaterTracker waterIntakeMl={currentLog.waterIntakeMl} waterGoalMl={profile.waterGoalMl} onUpdateWater={handleUpdateWater} />
+              <WorkoutTracker workouts={currentLog.workouts || []} profile={profile} onUpdateWorkouts={handleUpdateWorkouts} onCopyWorkout={(workout) => { const duplicated: WorkoutItem = { ...workout, id: `workout-copy-${Date.now()}`, loggedAt: new Date().toISOString() }; const todayDate = getTodayDateString(); setLogs((prev) => { const targetLog = prev[todayDate] || { date: todayDate, items: [], waterIntakeMl: 0, workouts: [] }; return { ...prev, [todayDate]: { ...targetLog, workouts: [duplicated, ...(targetLog.workouts || [])] } }; }); setCurrentDate(todayDate); }} onSaveRoutine={handleSaveRoutine} onOpenSavedWorkouts={() => setIsSavedWorkoutsOpen(true)} />
             </div>
+          )}
 
-            <WaterTracker waterIntakeMl={currentLog.waterIntakeMl} waterGoalMl={profile.waterGoalMl} onUpdateWater={handleUpdateWater} />
-            <WorkoutTracker workouts={currentLog.workouts || []} profile={profile} onUpdateWorkouts={handleUpdateWorkouts} onCopyWorkout={(workout) => { const duplicated: WorkoutItem = { ...workout, id: `workout-copy-${Date.now()}`, loggedAt: new Date().toISOString() }; const todayDate = getTodayDateString(); setLogs((prev) => { const targetLog = prev[todayDate] || { date: todayDate, items: [], waterIntakeMl: 0, workouts: [] }; return { ...prev, [todayDate]: { ...targetLog, workouts: [duplicated, ...(targetLog.workouts || [])] } }; }); setCurrentDate(todayDate); }} onSaveRoutine={handleSaveRoutine} onOpenSavedWorkouts={() => setIsSavedWorkoutsOpen(true)} />
-          </div>
-        )}
+          {activeView === 'statistics' && (
+            <StatisticsTab logs={logs} profile={profile} currentDate={currentDate} onSelectDate={(selectedDate) => { setCurrentDate(selectedDate); setActiveView('dashboard'); }} onOpenDailyReport={() => setIsDailyReportOpen(true)} />
+          )}
+        </main>
 
-        {activeView === 'statistics' && (
-          <StatisticsTab logs={logs} profile={profile} currentDate={currentDate} onSelectDate={(selectedDate) => { setCurrentDate(selectedDate); setActiveView('dashboard'); }} onOpenDailyReport={() => setIsDailyReportOpen(true)} />
-        )}
-      </main>
+        <footer className={`border-t ${t.innerBorder} ${t.innerBg} py-6 px-4 text-center text-xs ${t.textSecondary} w-full transition-colors`}>
+          <p>NutriPulse · Powered by Google Gemini 1.5 Flash &amp; AI Vision Intelligence</p>
+        </footer>
 
-      <footer className={`border-t ${t.innerBorder} ${t.innerBg} py-6 px-4 text-center text-xs ${t.textSecondary} w-full transition-colors`}>
-        <p>NutriPulse · Powered by Google Gemini 1.5 Flash &amp; AI Vision Intelligence</p>
-      </footer>
+        <BarcodeScannerModal isOpen={isBarcodeOpen} onClose={() => setIsBarcodeOpen(false)} onFoodLogged={handleFoodLogged} defaultMealType={activeMealTarget} />
+        <GeminiFoodModal isOpen={isGeminiOpen} onClose={() => { setIsGeminiOpen(false); setGeminiItemToEdit(undefined); }} onFoodLogged={(newItem) => { if (geminiItemToEdit) { handleUpdateItem({ ...newItem, id: geminiItemToEdit.id }); } else { handleFoodLogged(newItem); } }} defaultMealType={activeMealTarget} itemToEdit={geminiItemToEdit} />
+        <SavedFoodsModal key={activeMealTarget} isOpen={isSavedFoodsOpen} onClose={() => setIsSavedFoodsOpen(false)} savedFoods={savedFoods as any} onLogSavedFood={handleLogSavedFood as any} onDeleteSavedFood={handleDeleteSavedFood} onAddCustomSavedFood={handleAddCustomSavedFood as any} defaultMeal={activeMealTarget} />
+        <ProfileModal isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} profile={profile} onSaveProfile={setProfile} />
+        <SavedWorkoutsModal isOpen={isSavedWorkoutsOpen} onClose={() => setIsSavedWorkoutsOpen(false)} savedWorkouts={savedWorkouts} onLogSavedWorkout={handleLogSavedWorkout} onDeleteSavedWorkout={handleDeleteSavedWorkout} />
+        <GoalCelebrationModal logs={logs} profile={profile} forceOpenTest={isStreakPreviewOpen} onCloseTest={() => setIsStreakPreviewOpen(false)} />
+        <DailyReportModal logs={logs} profile={profile} isOpen={isDailyReportOpen} onClose={() => setIsDailyReportOpen(false)} />
+        <OfflineIndicator />
 
-      <BarcodeScannerModal isOpen={isBarcodeOpen} onClose={() => setIsBarcodeOpen(false)} onFoodLogged={handleFoodLogged} defaultMealType={activeMealTarget} />
-      <GeminiFoodModal isOpen={isGeminiOpen} onClose={() => { setIsGeminiOpen(false); setGeminiItemToEdit(undefined); }} onFoodLogged={(newItem) => { if (geminiItemToEdit) { handleUpdateItem({ ...newItem, id: geminiItemToEdit.id }); } else { handleFoodLogged(newItem); } }} defaultMealType={activeMealTarget} itemToEdit={geminiItemToEdit} />
-      <SavedFoodsModal key={activeMealTarget} isOpen={isSavedFoodsOpen} onClose={() => setIsSavedFoodsOpen(false)} savedFoods={savedFoods as any} onLogSavedFood={handleLogSavedFood as any} onDeleteSavedFood={handleDeleteSavedFood} onAddCustomSavedFood={handleAddCustomSavedFood as any} defaultMeal={activeMealTarget} />
-      <ProfileModal isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} profile={profile} onSaveProfile={setProfile} />
-      <SavedWorkoutsModal isOpen={isSavedWorkoutsOpen} onClose={() => setIsSavedWorkoutsOpen(false)} savedWorkouts={savedWorkouts} onLogSavedWorkout={handleLogSavedWorkout} onDeleteSavedWorkout={handleDeleteSavedWorkout} />
-      <GoalCelebrationModal logs={logs} profile={profile} forceOpenTest={isStreakPreviewOpen} onCloseTest={() => setIsStreakPreviewOpen(false)} />
-      <DailyReportModal logs={logs} profile={profile} isOpen={isDailyReportOpen} onClose={() => setIsDailyReportOpen(false)} />
-      <OfflineIndicator />
-
-      <MobileBottomNav
-        activeView={activeView} setActiveView={setActiveView}
-        onOpenBarcode={() => openBarcodeForMeal(activeMealTarget)} onOpenGemini={() => openGeminiForMeal(activeMealTarget)}
-        onOpenSavedFoods={() => openSavedFoodsForMeal(activeMealTarget)} onOpenProfile={() => setIsProfileOpen(true)}
-      />
-    </div>
+        <MobileBottomNav
+          activeView={activeView} setActiveView={setActiveView}
+          onOpenBarcode={() => openBarcodeForMeal(activeMealTarget)} onOpenGemini={() => openGeminiForMeal(activeMealTarget)}
+          onOpenSavedFoods={() => openSavedFoodsForMeal(activeMealTarget)} onOpenProfile={() => setIsProfileOpen(true)}
+        />
+        
+        {/* Floating Task Manager at the bottom */}
+        <TaskManager />
+      </div>
+    </TaskProvider>
   );
 }

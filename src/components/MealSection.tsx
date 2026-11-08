@@ -124,34 +124,26 @@ export const MealSection: React.FC<MealSectionProps> = ({
   );
 
   // Auto-calculation logic for Quick Add or Edit forms
-  const calculateAutoMacros = (
-    field: 'cals' | 'protein' | 'carbs' | 'fat',
-    val: string,
-    current: { cals: string; protein: string; carbs: string; fat: string }
-  ) => {
-    const next = { ...current, [field]: val };
-    const cNum = parseFloat(next.cals) || 0;
-    const pNum = parseFloat(next.protein) || 0;
-    const cCarb = parseFloat(next.carbs) || 0;
-    const cFat = parseFloat(next.fat) || 0;
+const calculateAutoMacros = (
+  field: 'cals' | 'protein' | 'carbs' | 'fat',
+  val: string,
+  current: { cals: string; protein: string; carbs: string; fat: string }
+) => {
+  const next = { ...current, [field]: val };
+  const cNum = parseFloat(next.cals) || 0;
+  const pNum = parseFloat(next.protein) || 0;
 
-    if (field === 'protein' || field === 'carbs' || field === 'fat') {
-      // If typing macros, auto-calculate total calories
-      const calcCals = Math.round(pNum * 4 + cCarb * 4 + cFat * 9);
-      if (calcCals > 0) {
-        next.cals = String(calcCals);
-      }
-    } else if (field === 'cals') {
-      // If typing calories and protein, assign balanced placeholder values for carbs/fat if empty
-      const proteinCals = pNum * 4;
-      const remainingCals = Math.max(0, cNum - proteinCals);
-      if (remainingCals > 0 && cCarb === 0 && cFat === 0) {
-        next.carbs = String(Math.round((remainingCals * 0.6) / 4));
-        next.fat = String(Math.round((remainingCals * 0.4) / 9));
-      }
+  // Recalculate Carbs and Fat EVERY time Calories or Protein is changed
+  if (field === 'cals' || field === 'protein') {
+    if (cNum > 0 && pNum > 0) {
+      const remainingCals = Math.max(0, cNum - (pNum * 4));
+      next.carbs = String(Math.round((remainingCals * 0.6) / 4));
+      next.fat = String(Math.round((remainingCals * 0.4) / 9));
     }
-    return next;
-  };
+  }
+
+  return next;
+};
 
   const handleQuickFieldChange = (field: 'cals' | 'protein' | 'carbs' | 'fat', val: string) => {
     const res = calculateAutoMacros(field, val, {
